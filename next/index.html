@@ -507,7 +507,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '1.4.0';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -553,6 +553,16 @@ const dayDiff = (a, b) => Math.round((toDate(a) - toDate(b)) / DAY);       // a 
 const addDays = (s, n) => { const d = toDate(s); d.setDate(d.getDate() + n); return ymd(d); };
 const koDate = s => { const d = toDate(s); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEK[d.getDay()]}요일`; };
 const koShort = s => { const d = toDate(s); return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`; };
+/** 끝 글자에 받침이 있으면 앞의 것, 없으면 뒤의 것을 고릅니다. 예) 서연'이' · 꾸미'가' */
+function pick(word, withFinal, without) {
+  const w = String(word || '').trim(), c = w.charCodeAt(w.length - 1);
+  const fin = c >= 0xAC00 && c <= 0xD7A3 ? (c - 0xAC00) % 28 > 0 : /[013678lmnLMN]$/.test(w);
+  return fin ? withFinal : without;
+}
+const josa = (word, withFinal, without) => String(word || '').trim() + pick(word, withFinal, without);
+/** 글 속의 예전 이름을 새 이름으로 바꿉니다. */
+const swapName = (text, from, to) => (from && to && from !== to ? String(text || '').split(from).join(to) : String(text || ''));
+const folderName = t => String(t || '').replace(/[\\\/:*?"<>|]/g, ' ').trim() || '사진첩';
 function sizeText(n) {
   if (n >= 1073741824) return (n / 1073741824).toFixed(1) + '기가';
   if (n >= 1048576) return (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + '메가';
@@ -795,6 +805,7 @@ function applyIndex(idx) {
 function renderAll(keep) {
   document.title = S.settings.title;
   $('#title').textContent = S.settings.title;
+  const homeName = $('meta[name="apple-mobile-web-app-title"]'); if (homeName) homeName.setAttribute('content', S.settings.title);
   renderHero(); renderMemories(); renderMoments(); renderFilters(); renderCalendar(); renderList(keep); renderMaster();
 }
 function renderMaster() {
@@ -813,7 +824,7 @@ function renderHero() {
   let kicker = '', num = '', subs = [];
   if (st.born && dayDiff(now, st.born) >= 0) {
     const n = dayDiff(now, st.born) + 1, months = monthsBetween(st.born, now);
-    kicker = `${st.name}가 태어난 지`; num = `${n.toLocaleString('ko-KR')}일`;
+    kicker = `${josa(st.name, '이', '가')} 태어난 지`; num = `${n.toLocaleString('ko-KR')}일`;
     if (months >= 1) subs.push(`생후 ${months}개월`);
     const hundred = addDays(st.born, 99), left100 = dayDiff(hundred, now);
     if (left100 > 0) subs.push(`백일(${koShort(hundred)})까지 ${left100}일`);
@@ -824,9 +835,9 @@ function renderHero() {
     }
   } else if (st.due) {
     const left = dayDiff(st.born || st.due, now);
-    if (left > 0) { kicker = `${st.name}를 만나기까지`; num = `${left}일`; if (pregText(now)) subs.push('오늘은 ' + pregText(now)); subs.push(`예정일 ${koShort(st.due)}`); }
-    else if (left === 0) { kicker = `${st.name}를 만나기로 한 날`; num = '오늘'; subs.push(`예정일 ${koShort(st.due)}`); }
-    else { kicker = `${st.name}를 기다린 지`; num = `예정일 +${-left}일`; subs.push('곧 만나요'); }
+    if (left > 0) { kicker = `${josa(st.name, '을', '를')} 만나기까지`; num = `${left}일`; if (pregText(now)) subs.push('오늘은 ' + pregText(now)); subs.push(`예정일 ${koShort(st.due)}`); }
+    else if (left === 0) { kicker = `${josa(st.name, '을', '를')} 만나기로 한 날`; num = '오늘'; subs.push(`예정일 ${koShort(st.due)}`); }
+    else { kicker = `${josa(st.name, '을', '를')} 기다린 지`; num = `예정일 +${-left}일`; subs.push('곧 만나요'); }
   } else { kicker = st.title; num = `${S.items.length}장`; }
   const fresh = S.seenBefore == null ? 0 : S.items.filter(x => x.u > S.seenBefore).length;
   box.textContent = '';
@@ -1357,7 +1368,7 @@ function openUpload() {
   let entries = [], running = false, done = false;
   const pick = h('input', { type: 'file', id: 'up-files', multiple: true, accept: 'image/*,video/*', hidden: true });
   const list = h('ul', { class: 'files' });
-  const cap = h('textarea', { class: 'input', id: 'up-cap', maxlength: '500', placeholder: '예) 꾸미 첫 목욕' });
+  const cap = h('textarea', { class: 'input', id: 'up-cap', maxlength: '500', placeholder: `예) ${S.settings.name} 첫 목욕` });
   const msg = h('p', { class: 'form-msg', role: 'alert' });
   const bar = h('div', { class: 'bar', hidden: true }, h('i'));
   const total = h('p', { class: 'hint' });
@@ -1506,10 +1517,25 @@ function backupName(it, used) {
   return name;
 }
 const csvCell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+/** 보관 폴더를 찾습니다. 사진첩 이름을 바꾼 뒤에도, 전에 보관해 둔 폴더가 있으면 그 폴더에 이어서 담습니다. */
+async function backupRoot(dir) {
+  const want = folderName(S.settings.title);
+  try { return { root: await dir.getDirectoryHandle(want), old: false }; } catch (e) {}
+  let best = null, seen = 0;
+  try {
+    for await (const ent of dir.values()) {
+      if (++seen > 400) break;
+      if (ent.kind !== 'directory') continue;
+      try { const f = await (await ent.getFileHandle('사진 목록.csv')).getFile(); if (!best || f.lastModified > best.at) best = { root: ent, at: f.lastModified }; } catch (e) {}
+    }
+  } catch (e) {}
+  if (best) return { root: best.root, old: true };
+  return { root: await dir.getDirectoryHandle(want, { create: true }), old: false };
+}
 async function runBackup(dir, ui) {
-  const root = await dir.getDirectoryHandle(S.settings.title.replace(/[\\\/:*?"<>|]/g, ' ').trim() || '사진첩', { create: true });
+  const { root, old } = await backupRoot(dir);
   const items = S.items.slice().sort((x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : Number(x.id) - Number(y.id)));
-  const used = new Set(), res = { saved: 0, had: 0, failed: [], stopped: false, bytes: 0, folder: root.name };
+  const used = new Set(), res = { saved: 0, had: 0, failed: [], stopped: false, bytes: 0, folder: root.name, old };
   const rows = [['찍은 날', '시각', '폴더', '파일 이름', '종류', '설명', '대표 사진', '첫 순간'].map(csvCell).join(',')];
   for (let i = 0; i < items.length; i++) {
     const it = items[i], name = backupName(it, used);
@@ -1568,7 +1594,7 @@ async function openBackup() {
     body.append(
       h('p', { text: '사진첩에 있는 원본 사진과 영상을 외장하드(또는 컴퓨터 폴더)에 그대로 내려받아 둡니다.' }),
       h('ul', { class: 'steps' },
-        h('li', { text: `고른 곳에 '${S.settings.title}' 폴더를 만들고, 그 안에 찍은 날짜별 폴더(예: 2027-05-05)로 나눠 담습니다.` }),
+        h('li', { text: `고른 곳에 '${folderName(S.settings.title)}' 폴더를 만들고(전에 보관해 둔 폴더가 있으면 그 폴더에 이어서), 그 안에 찍은 날짜별 폴더(예: 2027-05-05)로 나눠 담습니다.` }),
         h('li', { text: '이미 받아 둔 사진은 건너뛰고 새 사진만 받습니다. 사진첩에서 지운 사진도 외장하드에서는 지우지 않습니다.' }),
         h('li', { text: '사진 설명은 같은 폴더의 "사진 목록" 표 파일에 함께 적어 둡니다.' })),
       h('p', { class: 'box', text: `지금 사진첩: ${S.items.length}개 · ${sizeText(total)}` + (last ? ` · 마지막 보관 ${koShort(ymd(new Date(last)))} (그 뒤 새로 올린 것 ${since}개)` : ' · 아직 보관한 적 없음') }));
@@ -1619,7 +1645,8 @@ async function openBackup() {
         h('li', { text: `새로 받은 것: ${r.saved}개` }),
         h('li', { text: `이미 있어서 건너뛴 것: ${r.had}개` }),
         r.failed.length ? h('li', { text: `받지 못한 것: ${r.failed.length}개 (${r.failed.slice(0, 5).join(', ')}${r.failed.length > 5 ? ' …' : ''})` }) : null,
-        r.folder ? h('li', { text: `담긴 곳: ${where} › ${r.folder} › 찍은 날짜 폴더` }) : null),
+        r.folder ? h('li', { text: `담긴 곳: ${where} › ${r.folder} › 찍은 날짜 폴더` }) : null,
+        r.old ? h('li', { text: `사진첩 이름을 바꾸기 전에 만든 '${r.folder}' 폴더에 이어서 담았어요. 폴더 이름은 그대로 두셔도 되고, 바꾸셔도 다음에 알아서 찾습니다.` }) : null),
       h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn primary', onclick: () => ctl.close() }, '확인'),
         clean ? null : h('button', { type: 'button', class: 'btn', onclick: () => run(dir) }, '이어서 다시 하기')));
   };
@@ -1628,13 +1655,22 @@ async function openBackup() {
 
 /* ───────── 설정 ───────── */
 async function openSettings() {
-  const st = S.settings;
+  let st = S.settings;
   const field = (id, label, input, hint) => h('div', { class: 'field' }, h('label', { for: id, text: label }), input, hint ? h('p', { class: 'hint', text: hint }) : null);
   const title = h('input', { class: 'input', id: 'st-title', type: 'text', maxlength: '40', value: st.title });
   const name = h('input', { class: 'input', id: 'st-name', type: 'text', maxlength: '20', value: st.name });
   const due = h('input', { class: 'input', id: 'st-due', type: 'date', value: st.due || '' });
   const born = h('input', { class: 'input', id: 'st-born', type: 'date', value: st.born || '' });
   const hello = h('textarea', { class: 'input', id: 'st-hello', maxlength: '200' }); hello.value = st.hello || '';
+  // 아기 이름을 바꾸면 사진첩 이름·인사말 속의 예전 이름도 함께 바꿔 보여 줍니다(직접 고친 칸은 건드리지 않습니다).
+  let titleMine = false, helloMine = false;
+  title.addEventListener('input', () => { titleMine = true; });
+  hello.addEventListener('input', () => { helloMine = true; });
+  name.addEventListener('input', () => {
+    const nv = name.value.trim() || st.name;
+    if (!titleMine) title.value = swapName(st.title, st.name, nv).slice(0, 40);
+    if (!helloMine) hello.value = swapName(st.hello || '', st.name, nv).slice(0, 200);
+  });
   const msg = h('p', { class: 'form-msg', role: 'alert' });
   const form = h('form', {
     onsubmit: async e => {
@@ -1642,13 +1678,14 @@ async function openSettings() {
       try {
         const r = await api('settings', { settings: { title: title.value.trim(), name: name.value.trim(), due: due.value, born: born.value, hello: hello.value.trim() } }, 1);
         S.settings = { ...DEFAULTS, ...r.settings }; renderAll(true);
+        st = S.settings; titleMine = helloMine = false;
         msg.className = 'form-msg ok'; msg.textContent = '저장했어요.';
       } catch (err) { msg.textContent = err.message; }
     }
   },
     h('h3', { text: '아기 정보' }),
     field('st-title', '사진첩 이름', title),
-    field('st-name', '아기 이름 (태명)', name),
+    field('st-name', '아기 이름', name, '이름을 바꾸면 아래 사진첩 이름과 인사말 속의 이름도 함께 바뀝니다. 어색한 곳은 직접 고쳐 주세요.'),
     field('st-due', '출산 예정일', due),
     field('st-born', '태어난 날', born, '태어나면 적어 주세요. "태어난 지 며칠", "백일까지 며칠"이 자동으로 나옵니다.'),
     field('st-hello', '가족에게 건네는 인사말 (안 써도 돼요)', hello),
@@ -1961,7 +1998,10 @@ function openPrefs() {
   const minus = h('button', { type: 'button', class: 'btn', id: 'pt-down', 'aria-label': '글씨 한 포인트 작게' }, '－');
   const plus = h('button', { type: 'button', class: 'btn', id: 'pt-up', 'aria-label': '글씨 한 포인트 크게' }, '＋');
   const reset = h('button', { type: 'button', class: 'linkbtn', id: 'pt-reset' }, `처음 크기(${PT_BASE}포인트)로`);
-  const sample = h('div', { class: 'sample', 'aria-hidden': 'true' }, h('b', { text: S.settings.title }), `${S.settings.name} 사진이 이 크기로 보여요. 편한 크기로 맞춰 보세요.`);
+  const sampleTitle = h('b'), sampleText = h('span');
+  const drawSample = () => { sampleTitle.textContent = S.settings.title; sampleText.textContent = `${S.settings.name} 사진이 이 크기로 보여요. 편한 크기로 맞춰 보세요.`; };
+  const sample = h('div', { class: 'sample', 'aria-hidden': 'true' }, sampleTitle, sampleText);
+  drawSample();
   const faces = h('div', { class: 'faces', role: 'group', 'aria-label': '글씨체' });
   const draw = () => {
     T = currentType();
@@ -1995,24 +2035,83 @@ function openPrefs() {
         h('button', { type: 'button', class: 'btn', id: 'm-growth', onclick: go(openGrowth) }, '성장 기록'),
         h('button', { type: 'button', class: 'btn', id: 'm-settings', onclick: go(openSettings) }, '사진첩 관리'),
         h('button', { type: 'button', class: 'btn quiet', id: 'm-logout', onclick: go(logout) }, '나가기')),
-      h('p', { class: 'hint', text: '성장 기록은 엄마·아빠만 볼 수 있어요. 사진첩 관리에서 아기 정보와 암호를 바꾸고, 가족 링크를 새로 만들 수 있습니다.' })]
+      h('p', { class: 'hint', text: '성장 기록은 엄마·아빠만 볼 수 있어요. 사진첩 관리에서 예정일·인사말과 암호를 바꾸고, 가족 링크를 새로 만들 수 있습니다.' })]
     : [h('p', { class: 'hint', text: '사진을 올리고 고치는 것은 엄마·아빠만 할 수 있어요.' }),
       h('button', { type: 'button', class: 'btn', id: 'who', onclick: go(openLogin) }, '엄마·아빠 전용 들어가기')]);
   // 가족 링크 보내기 (엄마·아빠로 들어왔을 때만): 휴대폰에서는 카카오톡 같은 앱으로 바로 보내고, 아니면 복사합니다.
   const shareBox = () => {
     const link = S.demo ? '' : familyLink();
-    const words = `[${S.settings.title}] 아래 주소를 누르면 ${S.settings.name} 사진을 볼 수 있어요.`;
+    const words = () => `[${S.settings.title}] 아래 주소를 누르면 ${S.settings.name} 사진을 볼 수 있어요.`;
     const area = h('textarea', { class: 'link-box', id: 'share-link', readonly: true, rows: '3', 'aria-label': '가족 링크' });
     area.value = link || '(예시 화면에는 가족 링크가 없습니다)';
-    const copy = () => copyText(words + '\n' + link, area);
+    const copy = () => copyText(words() + '\n' + link, area);
     const canSend = !PREVIEW && !!link && typeof navigator.share === 'function';
-    const send = () => { navigator.share({ title: S.settings.title, text: words, url: link }).catch(e => { if (!e || e.name !== 'AbortError') copy(); }); };
+    const send = () => { navigator.share({ title: S.settings.title, text: words(), url: link }).catch(e => { if (!e || e.name !== 'AbortError') copy(); }); };
     return h('div', { class: 'pref' }, h('h3', { text: '가족 링크 보내기' }),
       h('p', { class: 'hint', text: '이 링크를 받은 사람은 로그인 없이 사진을 볼 수만 있어요. 가족에게만 보내 주세요.' }),
       h('div', { class: 'seg' },
         canSend ? h('button', { type: 'button', class: 'btn primary', id: 'share-send', onclick: send }, '가족에게 보내기') : null,
         h('button', { type: 'button', class: 'btn' + (canSend ? '' : ' primary'), id: 'share-copy', disabled: !link, onclick: copy }, '링크 복사')),
       area);
+  };
+  // 우리 아기 (엄마·아빠로 들어왔을 때만): 이름과 태어난 날을 적습니다. 이름을 바꾸면 화면의 이름이 모두 따라 바뀝니다.
+  const babyBox = note => {
+    const st = S.settings;
+    const name = h('input', { class: 'input', id: 'b-name', type: 'text', maxlength: '20', value: st.name, autocomplete: 'off', enterkeyhint: 'done' });
+    const born = h('input', { class: 'input', id: 'b-born', type: 'date', value: st.born || '', max: '2100-12-31' });
+    const titleOn = h('input', { type: 'checkbox', id: 'b-title-on', checked: true });
+    const titleWords = h('span');
+    const titleRow = h('label', { class: 'check' }, titleOn, titleWords);
+    const hello = h('textarea', { class: 'input', id: 'b-hello', maxlength: '200', rows: '3' });
+    const helloField = h('div', { class: 'field' }, h('label', { for: 'b-hello', text: '인사말도 이렇게 바꿀게요' }), hello,
+      h('p', { class: 'hint', text: '"가/이", "를/을"처럼 어색한 곳이 있으면 고쳐 주세요.' }));
+    const also = h('div', { class: 'box stack', id: 'b-also', hidden: true }, titleRow, helloField,
+      h('p', { class: 'hint', text: '이미 적어 둔 사진 설명과 첫 순간 글은 그대로 남습니다.' }));
+    const bornHint = h('p', { class: 'hint', id: 'b-born-hint' });
+    const msg = h('p', { class: 'form-msg' + (note ? ' ok' : ''), id: 'b-msg', role: 'alert', text: note || '' });
+    const save = h('button', { type: 'submit', class: 'btn primary', id: 'b-save' }, '저장');
+    const nv = () => name.value.trim();
+    let helloMine = false;
+    hello.addEventListener('input', () => { helloMine = true; });
+    const draw = () => {
+      const changed = !!nv() && nv() !== st.name;
+      const inTitle = changed && st.title.includes(st.name), inHello = changed && (st.hello || '').includes(st.name);
+      also.hidden = !changed; titleRow.hidden = !inTitle; helloField.hidden = !inHello;
+      if (inTitle) titleWords.textContent = `사진첩 이름도 함께 바꾸기: ${swapName(st.title, st.name, nv()).slice(0, 40)}`;
+      if (inHello && !helloMine) hello.value = swapName(st.hello, st.name, nv()).slice(0, 200);
+      const b = born.value, who = nv() || st.name;
+      bornHint.textContent = !b ? '태어나면 적어 주세요. "태어난 지 며칠", 백일·첫돌, "생후 몇 개월"이 자동으로 나옵니다.'
+        : dayDiff(b, today()) > 0 ? '아직 오지 않은 날이에요. 그날까지는 "만나기까지 며칠"로 보여요.'
+        : `첫 화면에 "${josa(who, '이', '가')} 태어난 지 ${(dayDiff(today(), b) + 1).toLocaleString('ko-KR')}일"로 나와요. 백일은 ${koShort(addDays(b, 99))}입니다.`;
+    };
+    name.addEventListener('input', draw); born.addEventListener('input', draw); born.addEventListener('change', draw);
+    const form = h('form', {
+      class: 'pref', id: 'b-form',
+      onsubmit: async e => {
+        e.preventDefault(); msg.className = 'form-msg'; msg.textContent = '';
+        if (!nv()) { msg.textContent = '아기 이름을 적어 주세요.'; name.focus(); return; }
+        const send = { name: nv(), born: born.value };
+        if (!also.hidden && !titleRow.hidden && titleOn.checked) send.title = swapName(st.title, st.name, nv()).slice(0, 40);
+        if (!also.hidden && !helloField.hidden) send.hello = hello.value.trim();
+        save.disabled = true; save.textContent = '저장하는 중…';
+        try {
+          const r = await api('settings', { settings: send }, 1);
+          S.settings = { ...DEFAULTS, ...r.settings }; renderAll(true); drawSample();
+          const done = [];
+          if (S.settings.name !== st.name) done.push(`이름 ${S.settings.name}`);
+          if ((S.settings.born || '') !== (st.born || '')) done.push(S.settings.born ? `태어난 날 ${koShort(S.settings.born)}` : '태어난 날 지움');
+          form.replaceWith(babyBox('저장했어요.' + (done.length ? ` (${done.join(' · ')})` : '')));
+        } catch (err) { msg.textContent = err.message; save.disabled = false; save.textContent = '저장'; }
+      }
+    },
+      h('h3', { text: '우리 아기' }),
+      h('div', { class: 'field' }, h('label', { for: 'b-name', text: '아기 이름' }), name,
+        h('p', { class: 'hint', text: `이름이 정해지면 바꿔 적어 주세요. 화면에 나오는 "${st.name}"${pick(st.name, '이', '가')} 모두 새 이름으로 바뀝니다.` })),
+      also,
+      h('div', { class: 'field' }, h('label', { for: 'b-born', text: '태어난 날' }), born, bornHint),
+      msg, h('div', { class: 'seg' }, save));
+    draw();
+    return form;
   };
   const fontPart = [
     h('div', { class: 'pref' }, h('h3', { text: '글씨 크기' }), h('div', { class: 'stepper' }, minus, out, plus), range,
@@ -2022,7 +2121,7 @@ function openPrefs() {
     h('hr'), view];
   // 엄마·아빠로 들어와 있으면 자주 쓰는 전용 단추와 가족 링크를 맨 위에 둡니다.
   const ctl = openSheet('설정', h('div', { class: 'stack' },
-    S.master ? [parents, h('hr'), shareBox(), h('hr'), ...fontPart] : [...fontPart, h('hr'), parents],
+    S.master ? [parents, h('hr'), babyBox(), h('hr'), shareBox(), h('hr'), ...fontPart] : [...fontPart, h('hr'), parents],
     h('p', { class: 'hint', text: '화면 버전 ' + APP_VERSION })));
   draw(); drawView();
 }
