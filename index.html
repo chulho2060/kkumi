@@ -199,12 +199,18 @@ textarea.input { min-height: 6.5rem; resize: vertical; line-height: 1.5; }
 .viewer .btn { background: transparent; color: var(--on-shade); border-color: var(--on-shade); }
 .viewer .btn.primary { background: var(--on-shade); color: var(--shade); }
 .viewer .btn.quiet { border-color: var(--shade-line); color: var(--on-shade-soft); }
-.v-stage { position: relative; min-height: 0; display: grid; place-items: center; overflow: hidden; }
+.v-stage { position: relative; min-height: 0; display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; overflow: hidden; }
 .v-stage img, .v-stage video { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
 .v-stage iframe { width: 100%; height: 100%; border: 0; background: var(--shade); }
 .v-stage .wait { position: absolute; left: 50%; bottom: 1rem; transform: translateX(-50%); background: var(--veil); border-radius: 99px; padding: .2rem 1rem; font-size: 1.0625rem; }
 .v-stage .vid { width: 100%; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: .5rem; justify-items: center; }
 .v-stage .vid a { color: var(--on-shade); font-size: 1.0625rem; padding: .3rem; }
+.v-stage .vframe { position: relative; width: 100%; height: 100%; overflow: hidden; }
+.v-stage .vframe iframe { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.v-stage .vlinks { display: flex; flex-wrap: wrap; gap: .3rem 1rem; justify-content: center; align-items: center; padding-inline: 16px; text-align: center; }
+@media (orientation: landscape) and (max-height: 540px) {   /* 휴대폰을 가로로 돌렸을 때 영상 칸을 넓힙니다 */
+  .viewer.is-video .v-info, .viewer.is-video .v-nav .extra { display: none; }
+}
 .v-info { padding-block: .6rem .2rem; text-align: center; max-height: 30vh; overflow: auto; }
 .v-info p:first-child { font-size: 1.3rem; line-height: 1.45; }
 .v-info p:last-child { color: var(--on-shade-soft); font-size: 1.0625rem; }
@@ -843,9 +849,33 @@ function videoBox(it) {
     return blob ? h('video', { src: URL.createObjectURL(blob), controls: true, playsinline: true }) : h('p', { text: '영상을 열 수 없어요.' });
   }
   const page = 'https://drive.google.com/file/d/' + encodeURIComponent(it.o);
+  const frame = h('iframe', { src: page + '/preview', allow: 'autoplay; fullscreen', allowfullscreen: true, title: it.c || '영상' });
+  const canFull = !!(document.fullscreenEnabled && frame.requestFullscreen) && matchMedia('(pointer: coarse)').matches;
   return h('div', { class: 'vid' },
-    h('iframe', { src: page + '/preview', allow: 'autoplay; fullscreen', allowfullscreen: true, title: it.c || '영상' }),
-    h('a', { href: page + '/view', target: '_blank', rel: 'noopener', text: '영상이 안 나오면 여기를 눌러 새 창으로 열어 주세요' }));
+    h('div', { class: 'vframe' }, frame),
+    h('div', { class: 'vlinks' },
+      canFull ? h('button', { type: 'button', class: 'btn quiet small', text: '가로 화면으로 크게 보기', onclick: () => videoFull(frame, it) }) : null,
+      h('a', { href: page + '/view', target: '_blank', rel: 'noopener', text: '영상이 안 나오면 여기를 눌러 새 창으로 열어 주세요' })));
+}
+/* 영상은 구글 드라이브 재생기를 그대로 씁니다. 휴대폰처럼 화면 폭이 좁으면 재생기가 단추를 여러 줄로
+   쌓아 영상 한가운데를 가리므로, 재생기를 VIDEO_MIN_W 폭으로 그린 뒤 화면 폭에 맞게 줄여서 보여 줍니다.
+   (영상 크기는 그대로이고 단추만 작아져 아래쪽 한 줄에 놓입니다. 넓은 화면에서는 아무것도 바뀌지 않습니다.) */
+const VIDEO_MIN_W = 800;
+function fitVideo() {
+  const box = $('#v-stage .vframe'), frame = box && box.querySelector('iframe');
+  if (!frame || document.fullscreenElement === frame) return;
+  const w = box.clientWidth, ht = box.clientHeight;
+  if (!w || !ht) return;
+  const s = Math.min(1, w / VIDEO_MIN_W);
+  frame.style.width = (w / s) + 'px';
+  frame.style.height = (ht / s) + 'px';
+  frame.style.transform = s < 1 ? 'scale(' + s + ')' : '';
+}
+async function videoFull(frame, it) {
+  try { await frame.requestFullscreen(); }
+  catch (e) { return toast('이 기기에서는 전체 화면을 쓸 수 없어요. 휴대폰을 가로로 돌려 보세요.'); }
+  const tall = it.w && it.h && it.h > it.w;   // 세로로 찍은 영상은 화면을 돌리지 않습니다
+  try { if (!tall && screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
 }
 async function showSlide() {
   const it = V.list[V.i]; if (!it) return closeViewer();
@@ -856,7 +886,8 @@ async function showSlide() {
   $('#v-prev').disabled = V.i === 0; $('#v-next').disabled = V.i === V.list.length - 1;
   $('#v-save').hidden = PREVIEW || it.k === 'v';
   stage.textContent = '';
-  if (it.k === 'v') { stopShow(); stage.append(videoBox(it)); return; }
+  $('#viewer').classList.toggle('is-video', it.k === 'v');
+  if (it.k === 'v') { stopShow(); stage.append(videoBox(it)); fitVideo(); requestAnimationFrame(fitVideo); return; }
   const img = h('img', { alt: it.c || koDate(it.d) + ' 사진' }), wait = h('span', { class: 'wait', text: '또렷한 사진을 불러오는 중…' });
   stage.append(img, wait);
   const t = await getThumb(it).catch(() => null);
@@ -1597,6 +1628,12 @@ function bindStatic() {
     if (F.open) { if (e.key === 'Escape') closeFrame(); else if (e.key === 'ArrowRight' || e.key === ' ') frameNext(); return; }
     if (!V.open || $('#sheets').childNodes.length) return;
     if (e.key === 'Escape') closeViewer(); else if (e.key === 'ArrowLeft') { stopShow(); step(-1); } else if (e.key === 'ArrowRight') { stopShow(); step(1); }
+  });
+  if ('ResizeObserver' in window) new ResizeObserver(() => fitVideo()).observe($('#v-stage'));
+  else window.addEventListener('resize', fitVideo);
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) { try { screen.orientation.unlock(); } catch (e) {} }
+    fitVideo();
   });
   let sx = 0, sy = 0;
   $('#v-stage').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
