@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6PiXB9br+TPhnzC9MR+AzrTnXZaic91rw5znwi2rr3g='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -227,6 +228,8 @@ textarea.input { min-height: 6rem; resize: vertical; line-height: 1.5; }
 .form-msg { font-weight: 700; color: var(--warn); }
 .form-msg.ok { color: var(--ok); }
 .form-msg:empty { display: none; }
+.copy-row { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; justify-content: space-between; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .9rem; }
+.copy-row span { flex: 1 1 12rem; }
 .row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .check { display: flex; gap: .6rem; align-items: center; font-weight: 500; }
 .check input { width: 1.6rem; height: 1.6rem; flex: none; accent-color: var(--accent); }
@@ -507,7 +510,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.4.1';
+const APP_VERSION = '1.5.0';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -666,6 +669,17 @@ async function api(a, body = {}, tries = 1) {
     }
   }
   throw fail('network', '연결이 잘 안 됩니다. 잠시 뒤에 다시 해 주세요.');
+}
+/** 이 기기를 알아보는 임의의 긴 글자. 암호를 맞게 넣은 적이 있는 기기는 서버가 잠금을 따로 셉니다. */
+function deviceId() {
+  let d = store.get('dev', '');
+  if (!/^[\w-]{16,80}$/.test(d || '')) {
+    const a = new Uint8Array(16);
+    try { crypto.getRandomValues(a); } catch (e) { for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256); }
+    d = Array.from(a, x => x.toString(16).padStart(2, '0')).join('');
+    store.set('dev', d);
+  }
+  return d;
 }
 function dropMaster(expired) {
   const was = S.master;
@@ -1253,7 +1267,7 @@ function openLogin() {
       if (!pw.value) { msg.textContent = '암호를 넣어 주세요.'; return; }
       go.disabled = true; go.textContent = '확인하는 중…';
       try {
-        const r = await api('login', { password: pw.value }, 2);
+        const r = await api('login', { password: pw.value, dev: deviceId() }, 2);
         setToken(r.token, keep.checked);
         if (r.key && r.key !== S.cfg.key) { S.cfg.key = r.key; putHash(); }
         S.master = true; ctl.close();
@@ -1572,6 +1586,11 @@ async function runBackup(dir, ui) {
     const w = await (await root.getFileHandle('사진 목록.csv', { create: true })).createWritable();
     await w.write('﻿' + rows.join('\r\n') + '\r\n'); await w.close();
   } catch (e) {}
+  try {   // 사진첩 목록(설명·날짜·첫 순간이 든 파일)도 그대로 담아 둡니다. 서버의 목록 파일을 다시 만들 때 쓸 수 있습니다.
+    const r = await api('list', {}, 2);
+    const w = await (await root.getFileHandle('사진첩 목록 사본.json', { create: true })).createWritable();
+    await w.write(JSON.stringify(r.index)); await w.close();
+  } catch (e) {}
   try {   // 성장 기록(엄마·아빠만 보는 기록)도 함께 담아 둡니다
     const g = await api('growth', { op: 'list' }, 1);
     if (g.records && g.records.length) {
@@ -1597,7 +1616,7 @@ async function openBackup() {
       h('ul', { class: 'steps' },
         h('li', { text: `고른 곳에 '${folderName(S.settings.title)}' 폴더를 만들고(전에 보관해 둔 폴더가 있으면 그 폴더에 이어서), 그 안에 찍은 날짜별 폴더(예: 2027-05-05)로 나눠 담습니다.` }),
         h('li', { text: '이미 받아 둔 사진은 건너뛰고 새 사진만 받습니다. 사진첩에서 지운 사진도 외장하드에서는 지우지 않습니다.' }),
-        h('li', { text: '사진 설명은 같은 폴더의 "사진 목록" 표 파일에 함께 적어 둡니다.' })),
+        h('li', { text: '사진 설명은 같은 폴더의 "사진 목록" 표 파일에 함께 적어 두고, 사진첩 목록 파일도 사본으로 담아 둡니다.' })),
       h('p', { class: 'box', text: `지금 사진첩: ${S.items.length}개 · ${sizeText(total)}` + (last ? ` · 마지막 보관 ${koShort(ymd(new Date(last)))} (그 뒤 새로 올린 것 ${since}개)` : ' · 아직 보관한 적 없음') }));
     if (!can) {
       body.append(h('p', { class: 'box warn', text: PREVIEW
@@ -1711,6 +1730,10 @@ async function openSettings() {
   const spaceBar = h('div', { class: 'bar', hidden: true }, h('i'));
   const folder = h('a', { class: 'btn small', target: '_blank', rel: 'noopener', hidden: true }, '구글 드라이브에서 사진 폴더 열기');
   const space = h('div', { class: 'stack' }, h('h3', { text: '저장 공간' }), spaceBox, spaceBar, h('div', { class: 'row' }, folder));
+  const verLine = h('p', { class: 'hint', id: 'st-ver', text: '화면 버전 ' + APP_VERSION });
+  const check = h('div', { class: 'stack' }, h('h3', { text: '사진첩 점검' }),
+    h('p', { class: 'hint', text: '목록에 적힌 사진과 구글 드라이브의 파일이 서로 맞는지 살펴봅니다. 목록이 바뀌는 날마다 자동으로 남겨 둔 목록 사본으로 되돌릴 수도 있습니다.' }),
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', id: 'st-check', onclick: () => openCheck() }, '사진첩 점검하기')));
 
   const p0 = h('input', { class: 'input', id: 'st-p0', type: 'password', autocomplete: 'current-password' });
   const p1 = h('input', { class: 'input', id: 'st-p1', type: 'password', autocomplete: 'new-password' });
@@ -1730,7 +1753,8 @@ async function openSettings() {
     field('st-p0', '지금 쓰는 암호', p0), field('st-p1', '새 암호 (6글자 이상)', p1),
     pwMsg, h('button', { type: 'submit', class: 'btn' }, '암호 바꾸기'));
 
-  openSheet('사진첩 관리', h('div', { class: 'stack' }, form, h('hr'), share, h('hr'), space, h('hr'), pw));
+  openSheet('사진첩 관리', h('div', { class: 'stack' }, form, h('hr'), share, h('hr'), space, h('hr'), check, h('hr'), pw, verLine));
+  api('status', {}, 2).then(v => { if (v && v.version) verLine.textContent = `화면 버전 ${APP_VERSION} · 서버 버전 ${v.version}`; }).catch(() => {});
   try {
     const r = await api('info', {}, 2);
     const mine = S.items.reduce((a, x) => a + (x.z || 0), 0);
@@ -1740,6 +1764,90 @@ async function openSettings() {
     if (r.limit) { spaceBar.hidden = false; spaceBar.firstChild.style.width = Math.min(100, r.used / r.limit * 100).toFixed(1) + '%'; }
     if (r.folderUrl) { folder.href = r.folderUrl; folder.hidden = false; }
   } catch (e) { spaceBox.textContent = '저장 공간을 확인하지 못했어요. ' + e.message; }
+}
+/* ───────── 사진첩 점검 · 목록 사본 (엄마·아빠만) ───────── */
+async function openCheck() {
+  const body = h('div', { class: 'stack' });
+  const ctl = openSheet('사진첩 점검', body);
+  const note = (cls, text) => h('p', { class: 'box' + (cls ? ' ' + cls : ''), text });
+  const again = label => h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', id: 'ck-again', onclick: () => run(false) }, label || '다시 점검하기'));
+  const copyLabel = c => {
+    const m = /^되돌리기 전 (\d\d)(\d\d)/.exec(c.label || '');
+    return (m ? `${koShort(c.day)} ${m[1]}시 ${m[2]}분, 되돌리기 직전의 목록` : `${koShort(c.day)}에 바뀌기 전의 목록`) + (c.note ? ` · ${c.note}` : '');
+  };
+  const copiesPart = (count, last) => {
+    const list = h('div', { class: 'stack', id: 'ck-copies' });
+    const load = async () => {
+      list.textContent = ''; list.append(note('', '목록 사본을 불러오는 중이에요…'));
+      try {
+        const r = await api('check', { op: 'copies' }, 2);
+        list.textContent = '';
+        if (!r.copies.length) { list.append(note('', '아직 남겨 둔 목록 사본이 없어요. 사진을 올리거나 고친 날부터 하나씩 생깁니다.')); return; }
+        for (const c of r.copies.slice(0, 20)) list.append(h('div', { class: 'copy-row' }, h('span', { text: copyLabel(c) }),
+          h('button', { type: 'button', class: 'btn small', onclick: () => restore(c) }, '이때로 되돌리기')));
+        if (r.copies.length > 20) list.append(h('p', { class: 'hint', text: `더 오래된 사본 ${r.copies.length - 20}개는 구글 드라이브의 "목록 사본" 폴더에 있습니다.` }));
+      } catch (e) { list.textContent = ''; list.append(note('warn', '목록 사본을 불러오지 못했어요. ' + e.message)); }
+    };
+    const restore = async c => {
+      if (!(await ask('목록 되돌리기', `사진첩 목록을 "${copyLabel(c)}"(으)로 되돌릴까요? 그 뒤에 올린 사진은 구글 드라이브에는 그대로 있지만 사진첩에서는 보이지 않게 되고, 그 뒤에 고친 설명·날짜도 예전으로 돌아갑니다. 지금 목록도 사본으로 남겨 두므로 다시 되돌릴 수 있어요.`, '되돌리기', true))) return;
+      try { await api('check', { op: 'restore', id: c.id }, 1); toast('목록을 되돌렸어요.'); await refresh(true); run(false); }
+      catch (e) { toast('되돌리지 못했어요. ' + e.message); }
+    };
+    return h('div', { class: 'stack' }, h('hr'), h('h3', { text: '목록 사본' }),
+      h('p', { class: 'hint', text: '사진 설명·날짜·첫 순간이 적힌 목록을, 바뀌는 날마다 바뀌기 직전 모습으로 하나씩 남겨 둡니다(최근 60개).' + (count ? ` 지금 ${count}개, 가장 최근은 ${koShort(last)}입니다.` : '') }),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', id: 'ck-copies-open', onclick: load }, '목록 사본 보기')), list);
+  };
+  const mend = async () => {
+    body.textContent = ''; const line = note('', '고치는 중이에요…'); body.append(line); ctl.setBusy(true);
+    try {
+      const r = await api('check', { op: 'fix' }, 1);
+      let left = Infinity;
+      for (let i = 0; i < 60; i++) {            // 표시를 지운 그림을 다시 만듭니다(한 번에 몇 장씩)
+        const q = await api('repair', {}, 2);
+        line.textContent = `그림을 다시 만드는 중이에요… 남은 것 ${q.left}개`;
+        if (!q.left || (!q.fixed && q.left >= left)) { left = q.left; break; }
+        left = q.left;
+      }
+      await refresh(true); ctl.setBusy(false);
+      run(false, r.fixed ? `${r.fixed}곳을 고쳤어요.` + (left ? ` 그림 ${left}개는 구글 드라이브가 미리 보기를 준비하면 자동으로 채워집니다.` : '') : '');
+    } catch (e) { ctl.setBusy(false); body.textContent = ''; body.append(note('warn', '고치지 못했어요. ' + e.message), again()); }
+  };
+  const run = async (fix, done) => {
+    body.textContent = ''; body.append(note('', '사진첩과 구글 드라이브를 맞춰 보는 중이에요. 사진이 많으면 1~2분 걸릴 수 있어요.')); ctl.setBusy(true);
+    let r;
+    try { r = await api('check', { op: 'scan' }, 1); }
+    catch (e) {
+      ctl.setBusy(false); body.textContent = '';
+      body.append(note('warn', e.code === 'bad_request'
+        ? '사진첩 점검은 저장 서버를 새 버전(1.3)으로 올린 뒤부터 쓸 수 있어요. 구글 앱스 스크립트에서 서버 코드를 바꾸고 "배포 관리 → 새 버전"으로 한 번만 올려 주세요.'
+        : '점검하지 못했어요. ' + e.message), again());
+      return;
+    }
+    ctl.setBusy(false); body.textContent = '';
+    if (done) body.append(note('ok', done));
+    if (r.broken) {
+      body.append(note('warn', '사진첩 목록 파일을 읽을 수 없어요. 아래 "목록 사본 보기"를 눌러, 사진 수가 맞는 가장 최근 것으로 되돌려 주세요. 사진과 영상 파일은 구글 드라이브에 그대로 있습니다.'), copiesPart(r.copies, r.lastCopy));
+      return;
+    }
+    const noPic = r.noView + r.badView, noSmall = r.noThumb + r.badThumb, mendable = r.badView + r.badThumb;
+    const clean = !r.noOrig && !noPic && !noSmall && !r.extra;
+    body.append(note(clean ? 'ok' : 'warn', (clean ? '문제를 찾지 못했어요. ' : '살펴볼 것이 있어요. ') + `사진 ${r.photos}장 · 영상 ${r.videos}개를 확인했습니다.` + (r.partial ? ' (사진이 많아 작은 그림 일부는 확인하지 못했어요.)' : '')));
+    const rows = h('ul', { class: 'steps', id: 'ck-rows' });
+    if (r.noOrig) rows.append(h('li', {}, h('b', { text: `원본 파일이 없는 사진: ${r.noOrig}개` }),
+      h('p', { class: 'hint', text: r.noOrigList.map(x => `${x.d} ${x.n}`).join(', ') + (r.noOrig > r.noOrigList.length ? ' …' : '') }),
+      h('p', { class: 'hint', text: '지운 지 30일이 안 됐으면 구글 드라이브 휴지통에서 되살릴 수 있고, 외장하드에 보관해 둔 것이 있으면 거기에도 있습니다. 사진첩에는 보기용 그림이 남아 있어 보는 데는 지장이 없어요.' })));
+    if (noPic) rows.append(h('li', {}, h('b', { text: `크게 볼 때 쓰는 그림이 없는 사진: ${noPic}개` })));
+    if (noSmall) rows.append(h('li', {}, h('b', { text: `작은 그림이 없는 사진·영상: ${noSmall}개` })));
+    if (r.extra) rows.append(h('li', {}, h('b', { text: `사진첩 목록에 없는 원본 파일: ${r.extra}개` }),
+      h('p', { class: 'hint', text: r.extraList.join(', ') + (r.extra > r.extraList.length ? ' …' : '') }),
+      h('p', { class: 'hint', text: '올리다가 끊겼거나 목록을 되돌렸을 때 생깁니다. 구글 드라이브의 "원본 사진" 폴더에 그대로 있으니, 필요하면 내려받아 다시 올려 주세요.' })));
+    if (rows.childNodes.length) body.append(rows);
+    if (mendable) body.append(h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn primary', id: 'ck-fix', onclick: mend }, '없어진 그림 다시 만들기')),
+      h('p', { class: 'hint', text: '사진이나 원본 파일을 지우지 않습니다. 없어진 그림만 구글 드라이브의 미리 보기로 다시 만듭니다.' }));
+    else if (noPic || noSmall) body.append(h('p', { class: 'hint', text: '없는 그림은 엄마·아빠로 들어와 있는 동안 자동으로 채워집니다.' }));
+    body.append(again(), copiesPart(r.copies, r.lastCopy));
+  };
+  run(false);
 }
 function openShare(first) {
   const area = h('textarea', { class: 'link-box', id: 'sh-link', readonly: true, 'aria-label': '가족 링크' }); area.value = familyLink();
@@ -2200,6 +2308,10 @@ async function refresh(keep) {
   } catch (e) {
     if (e.code === 'no_key') { await DB.clearAll(); store.del('cfg'); showWelcome('이 링크로는 사진첩이 열리지 않아요. 링크가 새로 바뀌었을 수 있으니, 엄마·아빠에게 새 링크를 보내 달라고 해 주세요.'); }
     else if (e.code === 'not_ready') showWelcome('아직 처음 설정이 끝나지 않은 사진첩이에요.');
+    else if (e.code === 'broken_index') {
+      if (S.token) { S.master = true; renderMaster(); showNotice('사진첩 목록 파일을 읽지 못했어요. 점검에서 목록 사본으로 되돌릴 수 있습니다.', '사진첩 점검 열기', () => openCheck()); }
+      else showNotice('사진첩 목록 파일을 읽지 못했어요. 엄마·아빠에게 알려 주세요.' + (S.items.length ? ' 지금은 지난번에 본 사진을 보여 드리고 있어요.' : ''), '엄마·아빠 전용 들어가기', () => openLogin());
+    }
     else showNotice(S.items.length ? '연결이 잘 안 돼서 지난번에 본 사진을 보여 드리고 있어요.' : '사진첩에 연결하지 못했어요. 인터넷을 확인한 뒤 다시 눌러 주세요.', '다시 불러오기', () => refresh(true));
   }
 }
@@ -2247,13 +2359,13 @@ function bindWelcome() {
     if (a.length < 6) { msg.textContent = '암호는 6글자 이상으로 정해 주세요.'; return; }
     if (a !== b) { msg.textContent = '두 암호가 서로 달라요. 다시 넣어 주세요.'; return; }
     busy(e.target, true, '사진첩을 만드는 중…');
-    try { await finish(await api('setup', { password: a }, 1), true); } catch (err) { msg.textContent = err.message; }
+    try { await finish(await api('setup', { password: a, dev: deviceId() }, 1), true); } catch (err) { msg.textContent = err.message; }
     busy(e.target, false);
   });
   $('#w-old').addEventListener('submit', async e => {
     e.preventDefault(); msg.textContent = '';
     busy(e.target, true, '확인하는 중…');
-    try { await finish(await api('login', { password: $('#w-pw').value }, 1), false); } catch (err) { msg.textContent = err.message; }
+    try { await finish(await api('login', { password: $('#w-pw').value, dev: deviceId() }, 1), false); } catch (err) { msg.textContent = err.message; }
     busy(e.target, false);
   });
   $('#w-demo').addEventListener('click', startDemo);
@@ -2390,6 +2502,14 @@ const Demo = {
       case 'info': return { ok: true, used: 71168000000, limit: 214748364800, key: '', folderUrl: '' };
       case 'orig': { const it = idx.items.find(x => x.o === b.id); const blob = it && this.orig.get(it.id); if (!blob) throw fail('not_found', '파일을 찾을 수 없습니다.'); return { ok: true, size: blob.size, data: await blobToB64(blob.slice(b.offset, b.offset + b.length)) }; }
       case 'changePw': return { ok: true, token: 'demo' };
+      case 'status': return { ok: true, ready: true, version: '예시' };
+      case 'check': {
+        const days = [0, 2, 5].map(n => addDays(today(), -n));
+        if (b.op === 'copies') return { ok: true, copies: days.map((d, i) => ({ id: 'demo-copy-' + i, day: d, label: '', note: `사진 ${Math.max(0, idx.items.length - i * 2)}개` })) };
+        if (b.op === 'restore') return { ok: true, items: idx.items.length };
+        return { ok: true, broken: false, items: idx.items.length, photos: idx.items.filter(x => x.k !== 'v').length, videos: idx.items.filter(x => x.k === 'v').length,
+          noOrig: 0, noOrigList: [], noView: 0, badView: 0, noThumb: 0, badThumb: 0, extra: 0, extraList: [], fixed: 0, partial: false, copies: days.length, lastCopy: days[0] };
+      }
       case 'growth': {
         const g = this.growth, num = v => (v === '' || v == null ? '' : Math.round(Number(v) * 100) / 100);
         if (b.op === 'save') { const r = b.record, rec = { id: r.id || String(++g.seq), d: r.d, h: num(r.h), w: num(r.w), c: num(r.c), n: r.n || '', u: Date.now() }; g.records = g.records.filter(x => x.id !== rec.id).concat(rec); }
