@@ -205,8 +205,10 @@ textarea.input { min-height: 6.5rem; resize: vertical; line-height: 1.5; }
 .v-stage .wait { position: absolute; left: 50%; bottom: 1rem; transform: translateX(-50%); background: var(--veil); border-radius: 99px; padding: .2rem 1rem; font-size: 1.0625rem; }
 .v-stage .vid { width: 100%; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: .5rem; justify-items: center; }
 .v-stage .vid a { color: var(--on-shade); font-size: 1.0625rem; padding: .3rem; }
-.v-stage .vframe { position: relative; width: 100%; height: 100%; overflow: hidden; }
-.v-stage .vframe iframe { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.v-stage .vframe { position: relative; width: 100%; height: 100%; overflow: hidden; background: var(--shade); }
+.v-stage .vinner { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.v-stage .vexit { display: none; position: absolute; left: 12px; top: 12px; z-index: 1; background: var(--veil); }
+.v-stage .vframe:fullscreen .vexit { display: inline-flex; align-items: center; }
 .v-stage .vlinks { display: flex; flex-wrap: wrap; gap: .3rem 1rem; justify-content: center; align-items: center; padding-inline: 16px; text-align: center; }
 @media (orientation: landscape) and (max-height: 540px) {   /* 휴대폰을 가로로 돌렸을 때 영상 칸을 넓힙니다 */
   .viewer.is-video .v-info, .viewer.is-video .v-nav .extra { display: none; }
@@ -850,11 +852,13 @@ function videoBox(it) {
   }
   const page = 'https://drive.google.com/file/d/' + encodeURIComponent(it.o);
   const frame = h('iframe', { src: page + '/preview', allow: 'autoplay; fullscreen', allowfullscreen: true, title: it.c || '영상' });
-  const canFull = !!(document.fullscreenEnabled && frame.requestFullscreen) && matchMedia('(pointer: coarse)').matches;
+  const inner = h('div', { class: 'vinner' }, frame), box = h('div', { class: 'vframe' }, inner);
+  const canFull = !!(document.fullscreenEnabled && box.requestFullscreen) && matchMedia('(pointer: coarse)').matches;
+  if (canFull) inner.append(h('button', { type: 'button', class: 'btn small vexit', text: '작게 보기 ✕', onclick: () => { try { document.exitFullscreen().catch(() => {}); } catch (e) {} } }));
   return h('div', { class: 'vid' },
-    h('div', { class: 'vframe' }, frame),
+    box,
     h('div', { class: 'vlinks' },
-      canFull ? h('button', { type: 'button', class: 'btn quiet small', text: '가로 화면으로 크게 보기', onclick: () => videoFull(frame, it) }) : null,
+      canFull ? h('button', { type: 'button', class: 'btn quiet small', text: '가로 화면으로 크게 보기', onclick: () => videoFull(box, it) }) : null,
       h('a', { href: page + '/view', target: '_blank', rel: 'noopener', text: '영상이 안 나오면 여기를 눌러 새 창으로 열어 주세요' })));
 }
 /* 영상은 구글 드라이브 재생기를 그대로 씁니다. 휴대폰처럼 화면 폭이 좁으면 재생기가 단추를 여러 줄로
@@ -862,20 +866,34 @@ function videoBox(it) {
    (영상 크기는 그대로이고 단추만 작아져 아래쪽 한 줄에 놓입니다. 넓은 화면에서는 아무것도 바뀌지 않습니다.) */
 const VIDEO_MIN_W = 800;
 function fitVideo() {
-  const box = $('#v-stage .vframe'), frame = box && box.querySelector('iframe');
-  if (!frame || document.fullscreenElement === frame) return;
+  const box = $('#v-stage .vframe'), inner = box && box.querySelector('.vinner');
+  if (!inner) return;
   const w = box.clientWidth, ht = box.clientHeight;
   if (!w || !ht) return;
+  if (document.fullscreenElement === box) {
+    /* 전체 화면: 화면을 가로로 돌릴 수 없는 곳(카카오톡 안의 브라우저처럼 세로로 고정된 앱)에서는
+       영상을 옆으로 눕혀 가로 화면처럼 보여 줍니다. 휴대폰을 옆으로 돌려서 보면 됩니다.
+       화면이 실제로 가로로 돌아가면 눕히지 않습니다. */
+    const turn = !!box._turn && ht > w;
+    inner.style.width = (turn ? ht : w) + 'px';
+    inner.style.height = (turn ? w : ht) + 'px';
+    inner.style.transform = turn ? 'translateX(' + w + 'px) rotate(90deg)' : '';
+    return;
+  }
   const s = Math.min(1, w / VIDEO_MIN_W);
-  frame.style.width = (w / s) + 'px';
-  frame.style.height = (ht / s) + 'px';
-  frame.style.transform = s < 1 ? 'scale(' + s + ')' : '';
+  inner.style.width = (w / s) + 'px';
+  inner.style.height = (ht / s) + 'px';
+  inner.style.transform = s < 1 ? 'scale(' + s + ')' : '';
 }
-async function videoFull(frame, it) {
-  try { await frame.requestFullscreen(); }
+async function videoFull(box, it) {
+  box._turn = false;
+  try { await box.requestFullscreen(); }
   catch (e) { return toast('이 기기에서는 전체 화면을 쓸 수 없어요. 휴대폰을 가로로 돌려 보세요.'); }
-  const tall = it.w && it.h && it.h > it.w;   // 세로로 찍은 영상은 화면을 돌리지 않습니다
-  try { if (!tall && screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+  if (!(it.w && it.h && it.h > it.w)) {   // 세로로 찍은 영상은 돌리지 않습니다
+    try { if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape'); } catch (e) {}
+    box._turn = true;
+  }
+  fitVideo();
 }
 async function showSlide() {
   const it = V.list[V.i]; if (!it) return closeViewer();
@@ -1630,7 +1648,7 @@ function bindStatic() {
     if (e.key === 'Escape') closeViewer(); else if (e.key === 'ArrowLeft') { stopShow(); step(-1); } else if (e.key === 'ArrowRight') { stopShow(); step(1); }
   });
   if ('ResizeObserver' in window) new ResizeObserver(() => fitVideo()).observe($('#v-stage'));
-  else window.addEventListener('resize', fitVideo);
+  window.addEventListener('resize', fitVideo);
   document.addEventListener('fullscreenchange', () => {
     if (!document.fullscreenElement) { try { screen.orientation.unlock(); } catch (e) {} }
     fitVideo();
