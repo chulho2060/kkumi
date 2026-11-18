@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6PiXB9br+TPhnzC9MR+AzrTnXZaic91rw5znwi2rr3g='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H8kwi0/SdXmJv6caedu8c2IQCcaqJ9HFyW5tLbbJAd0='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -124,6 +124,9 @@ main.wrap { padding-bottom: calc(var(--dock) + 5.5rem + env(safe-area-inset-bott
 .hero-art svg { display: block; width: min(5.4rem, 92px); height: auto; }
 .hero-hello { font-family: var(--font-title); font-size: 1.08rem; line-height: 1.45; padding-inline: .2rem; }
 .hero-count { display: flex; flex-wrap: wrap; gap: .4rem; }
+.home-hint { display: flex; flex-wrap: wrap; gap: .4rem .8rem; align-items: center; justify-content: space-between; padding: .55rem .9rem; border-radius: .9rem; background: var(--accent-soft); }
+.home-hint p { flex: 1 1 12rem; font-weight: 700; }
+.home-hint .row { flex: none; }
 @media (max-width: 26rem) { .hero-art { display: none; } }
 
 /* 첫 순간: 옆으로 넘겨 보는 한 줄 */
@@ -510,7 +513,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -864,7 +867,8 @@ function renderHero() {
         h('div', { class: 'hero-sub' }, subs.map(t => h('p', { text: t })))),
       h('div', { class: 'hero-art', html: ART })),
     st.hello ? h('p', { class: 'hero-hello', text: st.hello }) : null,
-    fresh ? h('p', { class: 'hero-count' }, h('span', { class: 'chip new', text: `새로 올라온 사진 ${fresh}장` })) : null].filter(Boolean));
+    fresh ? h('p', { class: 'hero-count' }, h('span', { class: 'chip new', text: `새로 올라온 사진 ${fresh}장` })) : null,
+    homeHint()].filter(Boolean));
 }
 const monthName = m => `${m.slice(0, 4)}년 ${Number(m.slice(5))}월`;
 function monthCounts() {
@@ -1047,6 +1051,7 @@ function videoBox(it) {
     const blob = Demo.orig.get(it.id);
     return blob ? h('video', { src: URL.createObjectURL(blob), controls: true, playsinline: true }) : h('p', { text: '영상을 열 수 없어요.' });
   }
+  if (navigator.onLine === false) return h('p', { class: 'box', text: '영상은 인터넷이 연결되어 있을 때 볼 수 있어요.' });
   const page = 'https://drive.google.com/file/d/' + encodeURIComponent(it.o);
   const frame = h('iframe', { src: page + '/preview', allow: 'autoplay; fullscreen', allowfullscreen: true, title: it.c || '영상' });
   const inner = h('div', { class: 'vinner' }, frame), box = h('div', { class: 'vframe' }, inner);
@@ -2227,7 +2232,12 @@ function openPrefs() {
       h('div', { class: 'scale', 'aria-hidden': 'true' }, h('span', { text: `작게 ${PT_MIN}` }), h('span', { text: `크게 ${PT_MAX}` })), sample, reset),
     h('hr'),
     h('div', { class: 'pref' }, h('h3', { text: '글씨체' }), faces),
-    h('hr'), view];
+    h('hr'), view,
+    h('hr'), h('div', { class: 'pref', id: 'home-pref' }, h('h3', { text: '홈 화면에 꺼내 두기' }),
+      h('p', { class: 'hint', text: STANDALONE
+        ? '지금 홈 화면에서 열어 보고 계세요. 한 번 본 사진은 인터넷이 없어도 다시 볼 수 있습니다.'
+        : '휴대폰 홈 화면에 사진첩 그림을 꺼내 두면, 다음부터는 그 그림만 눌러서 바로 열 수 있어요. 한 번 본 사진은 인터넷이 없어도 다시 볼 수 있습니다.' }),
+      STANDALONE ? null : h('div', { class: 'seg' }, h('button', { type: 'button', class: 'btn', id: 'home-open', onclick: () => openHomeGuide() }, '꺼내 두는 법 보기')))];
   // 엄마·아빠로 들어와 있으면 자주 쓰는 전용 단추와 가족 링크를 맨 위에 둡니다.
   const ctl = openSheet('설정', h('div', { class: 'stack' },
     S.master ? [parents, h('hr'), babyBox(), h('hr'), shareBox(), h('hr'), ...fontPart] : [...fontPart, h('hr'), parents],
@@ -2530,8 +2540,83 @@ async function startDemo() {
     PREVIEW ? '' : '예시 끝내기', () => location.reload());
   renderAll();
 }
+/* ───────── 홈 화면에 꺼내 두기 · 인터넷 없이 열기 ───────── */
+const UA = navigator.userAgent || '';
+const IOS = /iPad|iPhone|iPod/.test(UA) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const KAKAO = /KAKAOTALK/i.test(UA), SAMSUNG = /SamsungBrowser/i.test(UA), ANDROID = /Android/i.test(UA);
+const STANDALONE = (() => { try { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) { return false; } })();
+let installEvent = null;            // 브라우저가 "홈 화면에 꺼내 둘 수 있어요" 하고 알려 준 것(크롬·삼성 인터넷·엣지)
+/** 첫 화면의 작은 안내. 두 번째 방문부터, 꺼내 둘 방법이 있는 환경에서만 보이고, 한 번 닫으면 다시 나오지 않습니다. */
+function homeHint() {
+  if (S.demo || STANDALONE || store.get('home', '') || (S.visits || 0) < 2) return null;
+  if (!(installEvent || KAKAO || IOS || SAMSUNG)) return null;
+  return h('div', { class: 'home-hint', id: 'home-hint' },
+    h('p', { text: '홈 화면에 꺼내 두면 바로 열려요.' }),
+    h('div', { class: 'row' },
+      h('button', { type: 'button', class: 'btn small primary', id: 'home-hint-open', onclick: () => openHomeGuide() }, '꺼내 두는 법'),
+      h('button', { type: 'button', class: 'btn small quiet', id: 'home-hint-close', onclick: () => { store.set('home', 'no'); renderHero(); } }, '닫기')));
+}
+function openHomeGuide() {
+  const steps = (...lines) => h('ol', { class: 'steps', id: 'home-steps' }, lines.map(t => h('li', { text: t })));
+  const body = h('div', { class: 'stack' });
+  const msg = h('p', { class: 'form-msg', role: 'alert' });
+  if (STANDALONE) body.append(h('p', { class: 'box ok', text: '지금 홈 화면에서 열어 보고 계세요.' }));
+  else if (installEvent) {
+    body.append(h('p', { text: '아래 단추를 누르면 홈 화면에 사진첩 그림이 생겨요. 다음부터는 그 그림만 누르면 됩니다.' }),
+      h('button', { type: 'button', class: 'btn primary', id: 'home-install', onclick: async () => {
+        const ev = installEvent; if (!ev) return;
+        try { await ev.prompt(); const c = await ev.userChoice; if (c && c.outcome === 'accepted') { installEvent = null; store.set('home', 'done'); ctl.close(); renderHero(); toast('홈 화면에 꺼내 두었어요.'); } }
+        catch (e) { msg.textContent = '꺼내 두지 못했어요. 화면 오른쪽 위의 점 세 개(⋮)를 누르고 "홈 화면에 추가"를 눌러 주세요.'; }
+      } }, '홈 화면에 꺼내 두기'), msg);
+  } else if (KAKAO) {
+    const link = S.cfg && S.cfg.s ? linkFor(location.href.split('#')[0]) : location.href;
+    const out = () => {
+      // 카카오톡 안의 화면에서는 꺼내 둘 수 없어서, 휴대폰의 인터넷 앱으로 같은 사진첩을 엽니다.
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(link);
+      if (ANDROID) setTimeout(() => { if (document.visibilityState === 'visible') location.href = 'intent://' + link.replace(/^https?:\/\//, '') + '#Intent;scheme=https;end'; }, 1500);
+    };
+    body.append(h('p', { text: '카카오톡 안에서 열린 화면에서는 꺼내 둘 수 없어요. 휴대폰의 인터넷 앱(크롬, 삼성 인터넷, 사파리)으로 열어야 합니다.' }),
+      steps('아래 단추를 눌러 인터넷 앱으로 엽니다.', '새로 열린 화면에서 아래 단추 줄의 "설정"을 누르고 "꺼내 두는 법 보기"를 다시 누릅니다.'),
+      h('button', { type: 'button', class: 'btn primary', id: 'home-out', onclick: out }, '인터넷 앱으로 열기'),
+      h('p', { class: 'hint', text: '단추를 눌러도 그대로라면, 화면 아래(또는 위)의 점 세 개나 공유 그림을 누르고 "다른 브라우저로 열기"를 눌러 주세요.' }));
+  } else if (IOS) {
+    body.append(steps('화면 아래 가운데의 공유 단추(네모에서 화살표가 위로 나오는 그림)를 누릅니다.', '목록을 아래로 내려 "홈 화면에 추가"를 누릅니다.', '오른쪽 위의 "추가"를 누릅니다.'));
+  } else if (SAMSUNG) {
+    body.append(steps('화면 아래 오른쪽의 줄 세 개(≡)를 누릅니다.', '"현재 페이지 추가"를 누릅니다.', '"홈 화면"을 누릅니다.'));
+  } else if (ANDROID) {
+    body.append(steps('화면 오른쪽 위의 점 세 개(⋮)를 누릅니다.', '"홈 화면에 추가"를 누릅니다.', '"설치" 또는 "추가"를 누릅니다.'));
+  } else {
+    body.append(h('p', { text: '컴퓨터에서는 주소 칸 오른쪽 끝의 설치 그림을 누르면 사진첩을 따로 창으로 열 수 있어요. 이미 꺼내 두었다면 그 창으로 열어 주세요.' }));
+  }
+  body.append(h('p', { class: 'hint', text: '꺼내 둔 뒤에는 한 번 본 사진을 인터넷이 없어도 다시 볼 수 있어요. 영상과 새로 올라온 사진은 인터넷이 있을 때 보입니다.' }));
+  const ctl = openSheet('홈 화면에 꺼내 두기', body, { small: true });
+}
+/** 화면 저장 도우미를 켜고, 설치 정보를 붙입니다. 예시 화면·파일로 직접 연 화면에서는 하지 않습니다. */
+function setupApp() {
+  if (PREVIEW || !/^https?:$/.test(location.protocol)) return;
+  S.visits = (Number(store.get('visits', 0)) || 0) + 1; store.set('visits', S.visits);
+  // 아이폰은 홈 화면에 추가할 때 지금 주소(가족 링크가 붙은 주소)를 그대로 기억해야 해서, 설치 정보 파일을 붙이지 않습니다.
+  if (!IOS) document.head.append(h('link', { rel: 'manifest', href: 'manifest.webmanifest' }));
+  if ('serviceWorker' in navigator) {
+    const go = () => { navigator.serviceWorker.register('sw.js').catch(() => {}); };
+    if (document.readyState === 'complete') go(); else window.addEventListener('load', go);
+  }
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvent = e; if (!$('#album').hidden) renderHero(); });
+  window.addEventListener('appinstalled', () => { installEvent = null; store.set('home', 'done'); if (!$('#album').hidden) renderHero(); });
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
+  // 꺼내 둔 사진첩은 며칠씩 열려 있기도 합니다. 오래 있다가 돌아왔거나 인터넷이 다시 연결되면 새 사진을 확인합니다.
+  let hiddenAt = 0;
+  const idle = () => !S.demo && S.cfg && S.cfg.s && !$('#album').hidden && !$('#sheets').childNodes.length && !V.open && !F.open;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt > 5 * 60000 && idle()) refresh(true);
+    hiddenAt = 0;
+  });
+  window.addEventListener('online', () => { if (idle()) refresh(true); });
+}
 async function init() {
   bindStatic();
+  setupApp();
   if (PREVIEW) return startDemo();
   readCfg();
   if (!S.cfg.s) return showWelcome();
