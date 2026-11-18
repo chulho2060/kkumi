@@ -507,7 +507,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.4.1';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -634,15 +634,16 @@ function readCfg() {
   if (S.cfg.s) store.set('cfg', { s: S.cfg.s, key: S.cfg.key });
   S.token = store.get('token', '') || store.sget('token') || '';
 }
-function familyLink() {
-  const base = location.href.split('#')[0];
+function linkFor(base) {
   const fixed = sFromInput(FIXED_SERVER);
   return base + '#' + (fixed ? '' : 's=' + encodeURIComponent(S.cfg.s) + '&') + 'k=' + encodeURIComponent(S.cfg.key);
 }
+/** 가족에게 보내는 링크. 시험 주소(…/next/)에서 열었더라도 항상 본 주소로 만듭니다. */
+function familyLink() { return linkFor(location.href.split('#')[0].replace(/\/next\/(index\.html)?$/, '/')); }
 function putHash() {
   if (S.demo || !S.cfg.s) return;
   store.set('cfg', { s: S.cfg.s, key: S.cfg.key });
-  try { history.replaceState(history.state, '', familyLink()); } catch (e) {}
+  try { history.replaceState(history.state, '', linkFor(location.href.split('#')[0])); } catch (e) {}
 }
 function setToken(token, keep) {
   S.token = token || '';
