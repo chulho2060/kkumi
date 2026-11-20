@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XATs1MVG6ydnSKJh/9B/RckTpL41uuGuzJAWnjy3MBw='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ojw5MSyGWy9qNLJ27E071S8ERukglGtwKeILke//bKI='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -572,9 +572,10 @@ const josa = (word, withFinal, without) => String(word || '').trim() + pick(word
 const swapName = (text, from, to) => (from && to && from !== to ? String(text || '').split(from).join(to) : String(text || ''));
 const folderName = t => String(t || '').replace(/[\\\/:*?"<>|]/g, ' ').trim() || '사진첩';
 function sizeText(n) {
-  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + '기가';
-  if (n >= 1048576) return (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + '메가';
-  return Math.max(1, Math.round(n / 1024)) + '킬로';
+  // 용량 단위는 흔히 쓰는 영문 표기(KB·MB·GB)로 적습니다.
+  if (n >= 1073741824) return (n / 1073741824).toFixed(1) + 'GB';
+  if (n >= 1048576) return (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + 'MB';
+  return Math.max(1, Math.round(n / 1024)) + 'KB';
 }
 const cleanName = s => (String(s || '').replace(/[\\\/:*?"<>|\u0000-\u001f]/g, '_').replace(/^\.+/, '').trim().slice(0, 120)) || '사진';
 function blobToB64(blob) {
