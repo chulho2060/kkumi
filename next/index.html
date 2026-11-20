@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-k4U3b1HYX//YnMwtZo2qkmNNJDDUwYp0UvXS+YLPtZY='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xLNO98I4XrLN5GFjjOOUKsy3UsyRzd57XV9rra4LmCQ='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -539,7 +539,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.8.1';
+const APP_VERSION = '1.8.2';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -1092,7 +1092,7 @@ function openViewer(id, list) {
   V.open = true; V.back = document.activeElement;
   $('#viewer').hidden = false; $('#viewer').classList.toggle('bare', LAND.matches);
   document.body.classList.add('noscroll');
-  if (!PREVIEW) { try { history.pushState({ kkumiViewer: 1 }, ''); } catch (e) {} }
+  Back.opened();
   showSlide(); $('#v-close').focus(); trackScroll();
 }
 function closeViewer(fromBack) {
@@ -1101,7 +1101,7 @@ function closeViewer(fromBack) {
   $('#viewer').hidden = true; $('#viewer').classList.remove('bare');
   $('#v-stage').textContent = ''; $('#v-stage').classList.remove('zoom');
   if (!$('#sheets').childNodes.length) document.body.classList.remove('noscroll');
-  if (!fromBack && !PREVIEW) { try { if (history.state && history.state.kkumiViewer) history.back(); } catch (e) {} }
+  if (!fromBack) Back.closed();
   if (V.back && V.back.focus) V.back.focus();
   trackScroll();
 }
@@ -1372,7 +1372,7 @@ function openFrame(list, title) {
   $('#f-title').hidden = !F.custom; $('#f-title').textContent = F.custom ? F.custom.title : '';
   $('#frame').hidden = false; document.body.classList.add('noscroll');
   setFill(store.get('fill', false));
-  if (!PREVIEW) { try { history.pushState({ kkumiFrame: 1 }, ''); } catch (e) {} }
+  Back.opened();
   try { const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); } catch (e) {}
   frameLock(); frameNext(); $('#f-close').focus(); trackScroll();
   $('#f-hint').hidden = !!F.custom; clearTimeout(F.hint); F.hint = setTimeout(() => { $('#f-hint').hidden = true; }, 6000);
@@ -1384,12 +1384,41 @@ function closeFrame(fromBack) {
   document.body.classList.remove('noscroll');
   try { if (F.lock) F.lock.release(); } catch (e) {} F.lock = null;
   try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
-  if (!fromBack && !PREVIEW) { try { if (history.state && history.state.kkumiFrame) history.back(); } catch (e) {} }
+  if (!fromBack) Back.closed();
   renderAll(true);
   if (F.back && F.back.focus && document.contains(F.back)) F.back.focus();
 }
 
 /* ───────── 창(대화 상자) ───────── */
+/* ───────── 휴대폰의 '뒤로 가기' ─────────
+ * 창(설정 등)·크게 보기·액자가 열려 있을 때 뒤로 가기를 누르면, 사진첩을 나가지 않고 맨 위에 열린 것 하나만 닫습니다("닫기"와 같음).
+ * 방법: 무엇이든 열려 있는 동안 방문 기록에 '지킴이' 한 칸을 넣어 둡니다. 뒤로 가기는 그 칸만 빼 가고, 그때 맨 위의 것을 닫습니다.
+ */
+const Back = {
+  guard: false, skip: 0,
+  layers() { return $('#sheets').childNodes.length + (V.open ? 1 : 0) + (F.open ? 1 : 0); },
+  opened() {                      // 무언가 열렸을 때
+    if (PREVIEW || this.guard) return;
+    try { history.pushState({ kkumiGuard: 1 }, ''); this.guard = true; } catch (e) {}
+  },
+  closed() {                      // 화면의 "닫기"로 닫았을 때: 열린 것이 하나도 없으면 지킴이 칸을 뺍니다
+    if (PREVIEW) return;
+    setTimeout(() => {            // 닫자마자 다른 창을 여는 경우(설정 → 사진첩 관리)를 위해 한 박자 늦춥니다
+      if (!this.guard || this.layers() || this.leaving) return;     // 화면을 떠나는 중(새로 고침 등)이면 건드리지 않습니다
+      this.guard = false;
+      try { if (history.state && history.state.kkumiGuard) { this.skip++; history.back(); } } catch (e) {}
+    }, 0);
+  },
+  pressed() {                     // 뒤로 가기를 눌렀을 때
+    if (this.skip > 0) { this.skip--; return; }
+    this.guard = false;
+    const top = $('#sheets').lastElementChild;
+    if (top && top._ctl) { if (top._ctl.busy) toast('지금 하는 일이 끝난 뒤에 닫을 수 있어요.'); else top._ctl.close(true); }
+    else if (F.open) closeFrame(true);
+    else if (V.open) closeViewer(true);
+    if (this.layers()) this.opened();          // 아직 열린 것이 있으면 다시 지킵니다
+  }
+};
 function openSheet(title, content, opts = {}) {
   const prev = document.activeElement;
   const closeBtn = h('button', { type: 'button', class: 'btn quiet small', onclick: () => ctl.close() }, '닫기');
@@ -1400,18 +1429,21 @@ function openSheet(title, content, opts = {}) {
   const wrap = h('div', { class: 'sheet-wrap' + (opts.small ? ' small' : '') }, panel);
   const ctl = {
     busy: false, panel, foot,
-    close() {
+    close(fromBack) {
       if (ctl.busy) return;
       wrap.remove();
       if (!$('#sheets').childNodes.length && !V.open && !F.open) document.body.classList.remove('noscroll');
       if (opts.onclose) opts.onclose();
       if (prev && prev.focus && document.contains(prev)) prev.focus();
+      if (fromBack !== true) Back.closed();
     },
     setBusy(b) { ctl.busy = b; closeBtn.disabled = b; }
   };
   wrap.addEventListener('mousedown', e => { if (e.target === wrap) ctl.close(); });
   wrap.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); ctl.close(); } });
+  wrap._ctl = ctl;
   $('#sheets').append(wrap); document.body.classList.add('noscroll');
+  Back.opened();
   // 휴대폰에서는 자판이 불쑥 올라오지 않도록, 꼭 필요한 창(암호 넣기)에서만 입력 칸에 바로 들어갑니다.
   const typing = opts.type || !matchMedia('(pointer: coarse)').matches;
   const first = (typing && panel.querySelector('.sheet-body input:not([hidden]):not([type="range"]):not([type="checkbox"]), .sheet-body textarea')) || closeBtn;
@@ -2740,7 +2772,8 @@ function bindStatic() {
   $('#v-prev').addEventListener('click', () => { stopShow(); step(-1); }); $('#v-next').addEventListener('click', () => { stopShow(); step(1); });
   $('#v-show').addEventListener('click', toggleShow); $('#v-save').addEventListener('click', saveCurrent);
   $('#v-edit').addEventListener('click', () => { stopShow(); const it = V.list[V.i]; if (it) openEdit(it); });
-  window.addEventListener('popstate', () => { if (F.open) closeFrame(true); else if (V.open) closeViewer(true); });
+  window.addEventListener('popstate', () => Back.pressed());
+  window.addEventListener('beforeunload', () => { Back.leaving = true; }); window.addEventListener('pageshow', () => { Back.leaving = false; });
   document.addEventListener('keydown', e => {
     if (F.open) { if (e.key === 'Escape') closeFrame(); else if (e.key === 'ArrowRight' || e.key === ' ') frameNext(); return; }
     if (!V.open || $('#sheets').childNodes.length) return;
