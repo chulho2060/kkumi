@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sirfh7cN9NSGNsRUJXOhbOEQ2Nx4bFNwcYmX/cweBBA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-o8OmMjuuuiTlIC04TaUPtzhQYw30Aej9YPuq9DbHzpo='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -548,7 +548,7 @@ const FIXED_SERVER = '';
 const SERVER_PIN = 'c53fc7d303bb009071cc969725db2ca5a1af6244cd08c3bc2af0953a5b9c742b';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -1383,10 +1383,16 @@ async function saveCurrent() {
   const draw = () => {
     body.textContent = '';
     if (video && !S.demo) {
-      const href = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(it.o);
+      // 구글 드라이브 주소(drive.google.com)로 보내면 안드로이드에서는 드라이브 앱이 가로채 "계정 선택"을 띄우고 바로 내려받아지지 않습니다.
+      // 그래서 앱이 가로채지 않는 내려받기 전용 주소로 보냅니다(용량이 큰 파일의 "바이러스 검사" 확인 화면도 건너뜁니다).
+      const id = encodeURIComponent(it.o);
+      const href = 'https://drive.usercontent.google.com/download?id=' + id + '&export=download&confirm=t';
       body.append(h('p', { text: `영상은 구글 드라이브에서 원본 그대로 받습니다. (${sizeText(it.z)})` }),
-        h('a', { class: 'btn primary', id: 'sv-video', href, target: '_blank', rel: 'noopener', onclick: () => setTimeout(() => ctl.close(), 400) }, '원본 영상 받기'),
-        h('p', { class: 'hint', text: '새 창이 열리면 "다운로드"를 눌러 주세요. 용량이 큰 영상은 "바이러스 검사를 할 수 없습니다"라고 물어볼 수 있는데, "무시하고 다운로드"를 누르면 됩니다. 용량이 크니 와이파이에서 받는 것이 좋아요.' }),
+        h('a', { class: 'btn primary', id: 'sv-video', href, target: '_blank', rel: 'noopener', onclick: () => { msg.className = 'form-msg ok'; msg.textContent = '내려받기를 시작했어요. 다 받으면 휴대폰의 "다운로드"나 "내 파일"에서 볼 수 있어요.'; } }, '원본 영상 받기'),
+        h('p', { class: 'hint', text: '누르면 바로 내려받기가 시작됩니다. 용량이 크니 와이파이에서 받는 것이 좋아요.' }),
+        h('p', { class: 'hint', id: 'sv-other' }, '내려받기가 시작되지 않으면 ',
+          h('a', { id: 'sv-drive', href: 'https://drive.google.com/file/d/' + id + '/view', target: '_blank', rel: 'noopener', text: '구글 드라이브에서 열기' }),
+          '를 눌러 주세요. 구글 드라이브 앱이 "계정 선택"을 물어보면 어느 계정을 골라도 됩니다.'),
         msg);
       return;
     }
@@ -2770,16 +2776,44 @@ function openPrefs() {
     out.textContent = T.pt + '포인트'; range.value = String(T.pt);
     minus.disabled = T.pt <= PT_MIN; plus.disabled = T.pt >= PT_MAX; reset.hidden = T.pt === PT_BASE;
     faces.textContent = '';
-    for (const f of FACES) faces.append(h('button', { type: 'button', class: 'face', id: 'face-' + f.id, 'aria-pressed': String(f.id === T.face), onclick: () => { applyType(T.pt, f.id); draw(); } },
+    for (const f of FACES) faces.append(h('button', { type: 'button', class: 'face', id: 'face-' + f.id, 'aria-pressed': String(f.id === T.face), onclick: () => hold(() => document.getElementById('face-' + f.id), () => { applyType(T.pt, f.id); draw(); }) },
       h('b', { text: f.name + (f.id === 'gothic' ? ' · 처음 글씨체' : '') }),
       h('span', { class: 'ex', style: `font-family:${faceStack(f).body};font-size:${(1.25 * f.scale).toFixed(2)}rem`, text: '우리 아기 사진첩 123' }),
       h('span', { class: 'tick', text: f.id === T.face ? '고름 ✓' : '' })));
   };
-  const setPt = pt => { applyType(pt, T.face); draw(); };
-  minus.addEventListener('click', () => setPt(T.pt - 1));
-  plus.addEventListener('click', () => setPt(T.pt + 1));
-  range.addEventListener('input', () => setPt(Number(range.value)));
-  reset.addEventListener('click', () => setPt(PT_BASE));
+  /* 글씨 크기나 글씨체를 바꾸면 창 안의 모든 것이 함께 커지거나 작아져서, 방금 누른 단추가 손가락 밑에서 달아납니다.
+     바꾸기 전에 그 단추의 높이를 재 두었다가, 바꾼 뒤 창 안을 그만큼 밀어서 단추를 제자리에 둡니다. */
+  let pad = 0;                    // 창 맨 위에 닿아 더 밀 수 없을 때 위쪽에 덧대는 여백(픽셀)
+  const hold = (pick, change) => {
+    const box = out.closest('.sheet-body');
+    if (box) box.style.overflowAnchor = 'none';     // 브라우저가 스스로 자리를 맞추려는 동작은 끄고(엉뚱한 곳을 기준으로 삼아 서로 어긋남), 여기서 직접 맞춥니다
+    const at = () => { const el = pick(); return el && el.isConnected && !el.hidden ? el.getBoundingClientRect().top : null; };
+    const lift = px => { pad = Math.max(0, Math.round(px)); box.style.paddingTop = pad ? `calc(1.1rem + ${pad}px)` : ''; };
+    const before = at(); let kept = -1;
+    const fit = () => {
+      const now = at(); if (!box || before == null || now == null) return;
+      let move = now - before;
+      if (move > 0 && pad) { const cut = Math.min(pad, move); lift(pad - cut); move -= cut; }     // 덧댄 여백이 있으면 그것부터 줄입니다
+      box.scrollTop += move;
+      const left = at() - before;
+      if (left < -0.5) lift(pad - left);          // 글씨를 줄였는데 창이 이미 맨 위라 더 올릴 수 없을 때: 위에 여백을 덧대어 단추를 제자리로 내립니다
+      kept = box.scrollTop;
+    };
+    change(); fit();
+    // 새 글씨체가 조금 늦게 도착하면 한 번 더 밀립니다. 잠깐 지켜보다가 다시 맞춥니다(그사이 직접 밀어 옮겼으면 건드리지 않음).
+    const again = () => { if (box && box.scrollTop === kept) fit(); };
+    try {
+      const watch = new ResizeObserver(again), head = box.parentNode.querySelector('.sheet-head');
+      for (const el of [box, box.firstElementChild, head]) if (el) watch.observe(el);
+      document.fonts.addEventListener('loadingdone', again);
+      setTimeout(() => { watch.disconnect(); document.fonts.removeEventListener('loadingdone', again); }, 2500);
+    } catch (e) {}
+  };
+  const setPt = (pt, el) => hold(() => el, () => { applyType(pt, T.face); draw(); });
+  minus.addEventListener('click', () => setPt(T.pt - 1, minus));
+  plus.addEventListener('click', () => setPt(T.pt + 1, plus));
+  range.addEventListener('input', () => setPt(Number(range.value), range));
+  reset.addEventListener('click', () => setPt(PT_BASE, out));
 
   const seg = (pairs, pick) => h('div', { class: 'seg' }, pairs.map(([id, label, on, val]) => h('button', { type: 'button', class: 'btn small', id, 'aria-pressed': String(on), onclick: () => pick(val) }, label)));
   const view = h('div', { class: 'pref' });
