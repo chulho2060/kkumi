@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kdXCebBTdMceioeZjM3zsshLmZ9y/oqOJYTBcXsvvRg='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sirfh7cN9NSGNsRUJXOhbOEQ2Nx4bFNwcYmX/cweBBA='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -248,6 +248,12 @@ textarea.input { min-height: 6rem; resize: vertical; line-height: 1.5; }
 .form-msg:empty { display: none; }
 .copy-row { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; justify-content: space-between; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .9rem; }
 .copy-row span { flex: 1 1 12rem; }
+.bin-row { display: flex; gap: .7rem; align-items: center; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .9rem; }
+.bin-row .pic { position: relative; flex: none; width: 4.2rem; height: 4.2rem; aspect-ratio: 1; border-radius: .7rem; overflow: hidden; background: var(--accent-soft); }
+.bin-row .pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bin-row .pic .ph { font-size: .85rem; }
+.bin-row .bin-text { flex: 1 1 8rem; min-width: 0; display: grid; gap: .15rem; }
+.bin-row .bin-text span { overflow-wrap: anywhere; }
 .btn.choice { display: grid; gap: .15rem; justify-items: start; text-align: left; width: 100%; padding: .8rem 1.1rem; }
 .btn.choice span { font-weight: 500; font-size: .93rem; line-height: 1.45; }
 .row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
@@ -537,9 +543,12 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 /* 더 안전하게 쓰려면: 아래 따옴표 사이에 저장 서버 주소(또는 배포 번호)를 적어 두세요.
    그러면 가족 링크에 든 서버 주소는 무시하고 항상 이 서버만 씁니다. 비워 두어도 됩니다. */
 const FIXED_SERVER = '';
+/* 이 사진첩의 저장 서버 지문. 서버 주소 자체가 아니라 주소를 알아낼 수 없는 요약값이라 공개돼도 괜찮습니다.
+   적어 두면, 다른 서버를 가리키는 링크(가짜 링크)는 열지 않습니다. 서버 주소를 새로 만들었으면 이 값도 바꿔야 합니다. */
+const SERVER_PIN = 'c53fc7d303bb009071cc969725db2ca5a1af6244cd08c3bc2af0953a5b9c742b';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.8.3';
+const APP_VERSION = '1.9.0';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -631,6 +640,44 @@ function toast(text) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
 }
 function fail(code, message) { const e = new Error(message); e.code = code; return e; }
+/** 글자를 되돌릴 수 없는 요약값(SHA-256)으로 바꿉니다. 서버 지문을 비교할 때 씁니다. */
+function sha256(text) {
+  const bytes = new TextEncoder().encode(String(text)), rotr = (x, n) => (x >>> n) | (x << (32 - n));
+  const H = [], K = []; let n = 0;
+  for (let c = 2; n < 64; c++) {                           // 소수의 제곱근·세제곱근에서 상수를 만듭니다(표준 정의 그대로)
+    let prime = true; for (let d = 2; d * d <= c; d++) if (c % d === 0) { prime = false; break; }
+    if (!prime) continue;
+    if (n < 8) H[n] = (Math.pow(c, 1 / 2) * 4294967296) | 0;
+    K[n++] = (Math.pow(c, 1 / 3) * 4294967296) | 0;
+  }
+  const len = bytes.length, total = ((len + 9 + 63) >> 6) << 6, m = new Uint8Array(total); m.set(bytes); m[len] = 0x80;
+  const dv = new DataView(m.buffer); dv.setUint32(total - 8, Math.floor(len / 536870912)); dv.setUint32(total - 4, (len * 8) >>> 0);
+  const w = new Int32Array(64);
+  for (let off = 0; off < total; off += 64) {
+    for (let i = 0; i < 16; i++) w[i] = dv.getInt32(off + i * 4);
+    for (let i = 16; i < 64; i++) { const a = w[i - 15], b = w[i - 2]; w[i] = (w[i - 16] + (rotr(a, 7) ^ rotr(a, 18) ^ (a >>> 3)) + w[i - 7] + (rotr(b, 17) ^ rotr(b, 19) ^ (b >>> 10))) | 0; }
+    let [a, b, c, d, e, f, g, h] = H;
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+      const t2 = ((rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H[0] = (H[0] + a) | 0; H[1] = (H[1] + b) | 0; H[2] = (H[2] + c) | 0; H[3] = (H[3] + d) | 0; H[4] = (H[4] + e) | 0; H[5] = (H[5] + f) | 0; H[6] = (H[6] + g) | 0; H[7] = (H[7] + h) | 0;
+  }
+  return H.map(x => (x >>> 0).toString(16).padStart(8, '0')).join('');
+}
+/** 화면이 꺼져 있거나 인터넷이 끊겨 있는가(올리는 중에 이런 때는 실패로 치지 않고 기다립니다). */
+const away = () => document.visibilityState !== 'visible' || navigator.onLine === false;
+async function settle() {
+  while (away()) await new Promise(res => {
+    const done = () => { clearTimeout(t); document.removeEventListener('visibilitychange', done); window.removeEventListener('online', done); res(); };
+    const t = setTimeout(done, 5000); document.addEventListener('visibilitychange', done); window.addEventListener('online', done);
+  });
+  await sleep(800);
+}
+const randomId = () => { const a = new Uint8Array(12); try { crypto.getRandomValues(a); } catch (e) { for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256); } return Array.from(a, x => x.toString(16).padStart(2, '0')).join(''); };
+/** 서버 버전이 이 이상인가. 예) newer('1.6') */
+const newer = want => { const a = String(S.serverVer || '0').split('.').map(Number), b = want.split('.').map(Number); return (a[0] || 0) > b[0] || ((a[0] || 0) === b[0] && (a[1] || 0) >= b[1]); };
 
 /* ───────── 상태 ───────── */
 const S = {
@@ -654,20 +701,30 @@ function sFromInput(text) {
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(text)) return text;       // 개발·시험용
   return '';
 }
+const pinOf = s => sha256('kkumi-server|' + s);
+/** 이 사진첩의 서버가 맞는가. 지문을 적어 두지 않았으면 모두 받아들입니다(개발·시험용 주소는 늘 받아들임). */
+const pinOk = s => !SERVER_PIN || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//.test(s) || pinOf(s) === SERVER_PIN;
 function readCfg() {
   let s = '', k = '';
   try { const p = new URLSearchParams(location.hash.replace(/^#/, '')); s = sFromInput(p.get('s') || ''); k = p.get('k') || ''; S.jump = p.get('save') || ''; } catch (e) {}
-  const saved = store.get('cfg', null);
+  let saved = store.get('cfg', null);
   const fixed = sFromInput(FIXED_SERVER);
-  S.other = null;
+  S.other = null; S.badLink = false; S.prevKey = '';
   if (fixed) s = fixed;
+  // 이 사진첩의 서버가 아닌 곳을 가리키는 링크(가짜 링크일 수 있음)는 쓰지 않습니다. 기억해 둔 것은 지우지 않고 그대로 둡니다.
+  if (s && !pinOk(s)) { S.badLink = true; s = ''; k = ''; }
+  if (saved && saved.s && !pinOk(saved.s)) { saved = null; S.badSaved = true; }
   if (s && saved && saved.s && saved.s !== s && !fixed) {
     // 평소 보던 사진첩과 다른 서버를 가리키는 링크: 바로 바꾸지 않고 먼저 물어봅니다.
     S.other = { s, key: k }; s = saved.s; k = saved.key;
   }
-  if (s) S.cfg = { s, api: apiFromS(s), key: k || (saved && saved.s === s ? saved.key : '') || '' };
-  else if (saved && saved.s) S.cfg = { s: saved.s, api: apiFromS(saved.s), key: saved.key || '' };
-  if (S.cfg.s) store.set('cfg', { s: S.cfg.s, key: S.cfg.key });
+  if (s) {
+    const mine = saved && saved.s === s ? saved.key || '' : '';
+    // 링크의 열쇠가 기억하던 것과 다르면, 맞는 열쇠로 확인될 때까지 기억하던 것을 지우지 않습니다(틀린 링크 한 번에 사진첩을 잃지 않게).
+    if (k && mine && k !== mine) S.prevKey = mine;
+    S.cfg = { s, api: apiFromS(s), key: k || mine };
+  } else if (saved && saved.s) S.cfg = { s: saved.s, api: apiFromS(saved.s), key: saved.key || '' };
+  if (S.cfg.s && !S.prevKey) store.set('cfg', { s: S.cfg.s, key: S.cfg.key });
   S.token = store.get('token', '') || store.sget('token') || '';
 }
 function linkFor(base) {
@@ -690,18 +747,33 @@ function setToken(token, keep) {
 /* ───────── 서버와 이야기하기 ───────── */
 async function api(a, body = {}, tries = 1) {
   if (S.demo) return Demo.call(a, body);
+  let last = null;
   for (let i = 0; i < tries; i++) {
     try {
-      const res = await fetch(S.cfg.api, { method: 'POST', body: JSON.stringify({ a, k: S.cfg.key, t: S.token, ...body }) });
-      const j = await res.json();
-      if (!j.ok) throw fail(j.code || 'error', j.error || '문제가 생겼습니다.');
+      let res, j;
+      try { res = await fetch(S.cfg.api, { method: 'POST', body: JSON.stringify({ a, k: S.cfg.key, t: S.token, ...body }) }); }
+      catch (e) {
+        throw navigator.onLine === false ? fail('offline', '인터넷이 끊겨 있어요. 연결된 뒤에 다시 해 주세요.') : fail('network', '연결이 잘 안 됩니다. 잠시 뒤에 다시 해 주세요.');
+      }
+      try { j = await res.json(); }
+      catch (e) { throw fail('server', '저장 서버가 지금 답하지 못하고 있어요. 구글 쪽이 잠시 바쁘거나 하루 사용량 한도에 걸렸을 수 있습니다. 조금 뒤에 다시 해 주세요.'); }
+      if (!j.ok) throw fail(j.code || 'error', serverWords(j));
       return j;
     } catch (e) {
-      if (e.code) { if (e.code === 'no_master') dropMaster(true); throw e; }
+      if (!SOFT.includes(e.code)) { if (e.code === 'no_master') dropMaster(true); throw e; }
+      last = e;
       if (i < tries - 1) await sleep(900 * (i + 1));
     }
   }
-  throw fail('network', '연결이 잘 안 됩니다. 잠시 뒤에 다시 해 주세요.');
+  throw last || fail('network', '연결이 잘 안 됩니다. 잠시 뒤에 다시 해 주세요.');
+}
+const SOFT = ['offline', 'network', 'server'];             // 잠시 뒤에 다시 하면 될 수 있는 문제
+/** 서버가 준비해 둔 말이 아니라 구글이 낸 오류(영어)가 그대로 온 경우, 알아볼 수 있는 말로 바꿉니다. */
+function serverWords(j) {
+  const m = String(j.error || '');
+  if (j.code && j.code !== 'error') return m || '문제가 생겼습니다.';
+  if (/too many times|quota|rate limit|limit exceeded/i.test(m)) return '구글의 하루 사용량 한도에 걸렸어요. 시간이 지나면 다시 됩니다(길어도 하루).';
+  return '구글 드라이브가 잠시 답하지 못했어요. 조금 뒤에 다시 해 주세요.' + (S.master && m ? ` (자세한 내용: ${m.slice(0, 120)})` : '');
 }
 /** 이 기기를 알아보는 임의의 긴 글자. 암호를 맞게 넣은 적이 있는 기기는 서버가 잠금을 따로 셉니다. */
 function deviceId() {
@@ -722,16 +794,38 @@ async function fetchIndex(tries) {
   const have = S.index;
   const since = have && typeof have.rev === 'number' && Array.isArray(have.items) && Date.now() - (Number(store.get('fullAt', 0)) || 0) < 7 * DAY;
   const r = await api('list', since ? { since: have.rev } : {}, tries);
-  if (r.same) return { r, idx: have, changed: false };
+  if (r.same) return { r, idx: have, changed: false, gone: [] };
   if (r.delta && have) {
     const d = r.delta, m = new Map(have.items.map(x => [x.id, x]));
     for (const id of d.gone || []) m.delete(String(id));
     for (const it of d.items || []) m.set(it.id, it);
     const items = [...m.values()].sort((a, b) => Number(a.id) - Number(b.id));
-    return { r, idx: { ...have, rev: d.rev, seq: d.seq, packs: d.packs || [], settings: d.settings || {}, items }, changed: true };
+    return { r, idx: { ...have, rev: d.rev, seq: d.seq, packs: d.packs || [], settings: d.settings || {}, items }, changed: true, gone: (d.gone || []).map(String).filter(id => !m.has(id)) };
   }
   store.set('fullAt', Date.now());
-  return { r, idx: r.index, changed: true };
+  return { r, idx: r.index, changed: true, gone: [], full: true };
+}
+/**
+ * 사진첩에서 빠진 사진은 이 기기 안 보관함에서도 지웁니다(엄마·아빠가 지운 사진이 가족 기기에 남지 않게).
+ *  - 바뀐 것만 받았을 때: 지워졌다고 알려 온 번호만.
+ *  - 전체를 다시 받았을 때(일주일에 한 번쯤): 보관함을 훑어 목록에 없는 것을 모두.
+ */
+function forget(ids) {
+  if (!ids || !ids.length) return;
+  const keys = [];
+  for (const id of ids) {
+    for (const m of [thumbURL, viewURL]) { const u = m.get(id); if (u) { try { URL.revokeObjectURL(u); } catch (e) {} m.delete(id); } }
+    keys.push('t:' + id, 'v:' + id);
+  }
+  DB.delMany('img', keys);
+}
+async function tidy(got) {
+  if (S.demo || !got || !got.changed) return;
+  if (got.gone && got.gone.length) forget(got.gone);
+  if (!got.full || !got.idx || !Array.isArray(got.idx.items)) return;
+  const keys = await DB.keys('img'); if (!keys || !keys.length) return;
+  const alive = new Set(got.idx.items.map(x => String(x.id)));
+  forget([...new Set(keys.map(k => String(k).slice(2)).filter(id => !alive.has(id)))]);
 }
 function dropMaster(expired) {
   const was = S.master;
@@ -771,6 +865,8 @@ const DB = {
   set(storeName, key, val) { return this.tx(storeName, 'readwrite', st => { st.put(val, key); }); },
   setMany(storeName, entries) { return this.tx(storeName, 'readwrite', st => { for (const [k, v] of entries) st.put(v, k); }); },
   del(storeName, key) { return this.tx(storeName, 'readwrite', st => { st.delete(key); }); },
+  delMany(storeName, keys) { return keys.length ? this.tx(storeName, 'readwrite', st => { for (const k of keys) st.delete(k); }) : Promise.resolve(); },
+  keys(storeName) { return this.tx(storeName, 'readonly', st => st.getAllKeys()); },
   async clearAll() { await this.tx('img', 'readwrite', st => { st.clear(); }); await this.tx('kv', 'readwrite', st => { st.clear(); }); }
 };
 
@@ -922,7 +1018,7 @@ function renderHero() {
       h('div', { class: 'hero-art', html: ART })),
     st.hello ? h('p', { class: 'hero-hello', text: st.hello }) : null,
     fresh ? h('p', { class: 'hero-count' }, h('span', { class: 'chip new', text: `새로 올라온 사진 ${fresh}장` })) : null,
-    homeHint()].filter(Boolean));
+    homeHint(), ...keepHints()].filter(Boolean));
 }
 const monthName = m => `${m.slice(0, 4)}년 ${Number(m.slice(5))}월`;
 function monthCounts() {
@@ -1016,7 +1112,7 @@ function renderMore(until = 0) {
       ? h('div', { class: 'day-head' }, h('h2', { text: group[0].m }), h('span', { class: 'age', text: koShort(date) + (age ? ' · ' + age : '') }))
       : h('div', { class: 'day-head' }, h('h2', { text: koDate(date) }), age ? h('span', { class: 'age', text: age }) : null,
         S.pick ? h('button', { type: 'button', class: 'btn small quiet day-pick', onclick: () => { for (const x of group) { if (allPicked) S.pick.delete(x.id); else S.pick.add(x.id); } renderList(true); } }, allPicked ? '이날 고르기 풀기' : `이날 ${group.length}개 모두 고르기`) : null);
-    const open = mom || group.length <= limit || S.openDays.has(date);
+    const open = mom || !!S.pick || group.length <= limit || S.openDays.has(date);      // 고르는 중에는 접지 않습니다(안 보이는 것이 함께 골라지지 않게)
     const grid = h('div', { class: 'grid' }, (open ? group : group.slice(0, limit)).map(makeTile));
     const sec = h('section', { class: 'day', 'data-m': date.slice(0, 7) }, head, grid);
     if (!open) {
@@ -1334,7 +1430,7 @@ async function frameLock() {
 }
 async function frameSync() {
   F.lastSync = Date.now();
-  if (!S.demo) { try { const got = await fetchIndex(1); if (got.changed) { applyIndex(got.idx); DB.set('kv', 'index', got.idx); packWait.clear(); } } catch (e) {} }
+  if (!S.demo) { try { const got = await fetchIndex(1); if (got.changed) { applyIndex(got.idx); DB.set('kv', 'index', got.idx); packWait.clear(); tidy(got); } } catch (e) {} }
   const added = F.custom ? [] : framePhotos().filter(x => !F.known.has(x.id)).sort((x, y) => y.u - x.u);
   for (const it of added) F.known.add(it.id);
   const alive = new Set(S.items.map(x => x.id));
@@ -1433,14 +1529,23 @@ function openSheet(title, content, opts = {}) {
   const wrap = h('div', { class: 'sheet-wrap' + (opts.small ? ' small' : '') }, panel);
   const ctl = {
     busy: false, panel, foot,
-    close(fromBack) {
-      if (ctl.busy) return;
+    async close(fromBack, sure) {
+      if (ctl.busy || ctl.asking) return;
+      if (sure !== true && opts.dirty && opts.dirty()) {
+        // 적어 둔 것이 있는데 닫으려 할 때(바깥을 누름, 닫기, 뒤로 가기): 한 번 물어봅니다
+        ctl.asking = true;
+        const yes = await ask('그냥 닫을까요?', '적어 둔 내용이 아직 저장되지 않았어요. 닫으면 사라집니다.', '닫기', true);
+        ctl.asking = false;
+        if (!yes) return;
+        fromBack = false;
+      }
       wrap.remove();
       if (!$('#sheets').childNodes.length && !V.open && !F.open) document.body.classList.remove('noscroll');
       if (opts.onclose) opts.onclose();
       if (prev && prev.focus && document.contains(prev)) prev.focus();
       if (fromBack !== true) Back.closed();
     },
+    done() { return ctl.close(false, true); },                // 저장을 마쳤을 때: 묻지 않고 닫습니다
     setBusy(b) { ctl.busy = b; closeBtn.disabled = b; }
   };
   wrap.addEventListener('mousedown', e => { if (e.target === wrap) ctl.close(); });
@@ -1484,7 +1589,7 @@ function openLogin() {
         const r = await api('login', { password: pw.value, dev: deviceId() }, 2);
         setToken(r.token, keep.checked);
         if (r.key && r.key !== S.cfg.key) { S.cfg.key = r.key; putHash(); }
-        S.master = true; ctl.close();
+        S.master = true; S.expired = false; ctl.close();
         if (S.demo) renderAll(true); else await refresh(true);
         toast('엄마·아빠로 들어왔어요.');
       } catch (err) { msg.textContent = err.message; go.disabled = false; go.textContent = '들어가기'; }
@@ -1568,15 +1673,33 @@ async function makeImages(file, kind) {
   URL.revokeObjectURL(url);
   return out;
 }
-async function uploadOne(en, onPart) {
+/**
+ * 답이 끊겨도 같은 요청을 다시 보내 마무리합니다. 서버(1.6부터)가 같은 올리기는 한 번만 처리하므로 사진이 두 번 들어가지 않습니다.
+ * 화면이 꺼져 있거나 인터넷이 끊긴 동안은 실패로 세지 않고, 돌아올 때까지 기다립니다.
+ */
+async function steady(fn, note) {
+  for (let n = 0; ;) {
+    try { return await fn(); }
+    catch (e) {
+      if (!SOFT.includes(e.code) && e.code !== 'busy') throw e;
+      if (away()) { note(true); await settle(); note(false); continue; }
+      if (++n > 4) throw e;
+      await sleep(2000 * n);
+    }
+  }
+}
+async function uploadOne(en, onPart, note = () => {}) {
   const file = en.file, im = await makeImages(file, en.kind);
+  en.uid = en.uid || randomId();
+  const safe = newer('1.6');                    // 예전 서버는 같은 요청을 두 번 받으면 두 번 올리므로, 다시 보내지 않습니다
+  const send = fn => (safe ? steady(fn, note) : fn());
   const base = {
     name: file.name, mime: file.type || 'application/octet-stream', date: en.date, time: en.time, kind: en.kind, caption: en.caption || '',
     w: im.w, h: im.h, thumb: im.thumb ? await blobToB64(im.thumb) : '', view: im.view ? await blobToB64(im.view) : ''
   };
   let r;
   if (S.demo) r = await api('upload', { ...base, file });
-  else if (file.size <= SIMPLE_MAX) { onPart(0.3); r = await api('upload', { ...base, orig: await blobToB64(file) }, 1); }
+  else if (file.size <= SIMPLE_MAX) { onPart(0.3); const orig = await blobToB64(file); r = await send(() => api('upload', { ...base, uid: en.uid, orig }, 1)); }
   else {
     const start = await api('uploadStart', { name: file.name, mime: base.mime, size: file.size, date: en.date }, 2);
     if (start.chunk) CHUNK = start.chunk;
@@ -1588,19 +1711,20 @@ async function uploadOne(en, onPart) {
         if (q.done) break;
         off = typeof q.next === 'number' ? q.next : off + CHUNK; fails = 0;
       } catch (e) {
-        if (e.code === 'upload_lost' || e.code === 'no_master' || ++fails > 6) throw e;
-        await sleep(Math.min(15000, 1500 * fails));
+        if (e.code === 'upload_lost' || e.code === 'no_master') throw e;
+        if (away()) { note(true); await settle(); note(false); }       // 화면이 꺼졌거나 다른 앱에 다녀온 동안은 실패로 세지 않습니다
+        else { if (++fails > 6) throw e; await sleep(Math.min(15000, 1500 * fails)); }
         try { const q = await api('uploadChunk', { uploadId: start.uploadId, probe: true }, 2); if (q.done) break; if (typeof q.next === 'number') off = q.next; } catch (e2) {}
       }
       onPart(Math.min(0.95, off / file.size));
     }
-    r = await api('upload', { ...base, uploadId: start.uploadId }, 1);
+    r = await send(() => api('upload', { ...base, uploadId: start.uploadId }, 1));
   }
   const it = r.item;
   if (im.thumb) { setThumb(it.id, im.thumb); DB.set('img', 't:' + it.id, im.thumb); }
   if (im.view) { viewURL.set(it.id, URL.createObjectURL(im.view)); DB.set('img', 'v:' + it.id, im.view); }
   if (S.demo && en.kind === 'v') Demo.orig.set(it.id, file);
-  S.items.push(it);
+  if (!S.items.some(x => x.id === it.id)) S.items.push(it);
   return it;
 }
 function openUpload() {
@@ -1647,6 +1771,7 @@ function openUpload() {
     running = true; ctl.setBusy(true); choose.disabled = true; cap.disabled = true; bar.hidden = false; msg.textContent = '';
     let awake = null;       // 올리는 동안 화면이 꺼지면 휴대폰이 전송을 멈추기도 해서, 화면을 켜 둡니다
     try { if (navigator.wakeLock) awake = await navigator.wakeLock.request('screen'); } catch (e) {}
+    if (!S.demo && !S.serverVer) { try { S.serverVer = (await api('status', {}, 2)).version; } catch (e) {} }
     draw();
     const todo = entries.filter(e => !e.dup); let ok = 0, okPhotos = 0, bad = 0, missing = 0;
     for (let i = 0; i < todo.length; i++) {
@@ -1654,16 +1779,28 @@ function openUpload() {
       const mark = (cls, text) => { en.state = cls; en.note = text; en.stEl.className = 'st ' + cls; en.stEl.textContent = text; };
       const part = p => { bar.firstChild.style.width = ((i + p) / todo.length * 100).toFixed(1) + '%'; };
       mark('', '올리는 중…'); part(0.05);
-      try { const it = await uploadOne(en, part); ok++; if (it.k !== 'v') okPhotos++; if (!it.th || (it.k === 'p' && !it.v)) missing++; mark('ok', '올렸어요'); }
-      catch (e) { bad++; mark('bad', '못 올렸어요: ' + e.message); if (e.code === 'no_master') break; }
+      const waiting = on => mark('', on ? '잠시 멈췄어요. 화면이 켜지고 인터넷이 연결되면 이어서 올립니다.' : '올리는 중…');
+      try { const it = await uploadOne(en, part, waiting); ok++; if (it.k !== 'v') okPhotos++; if (!it.th || (it.k === 'p' && !it.v)) missing++; mark('ok', '올렸어요'); }
+      catch (e) { bad++; en.failed = true; mark('bad', '못 올렸어요: ' + e.message); if (e.code === 'no_master') break; }
       part(1);
+    }
+    if (bad && !S.demo && S.master) {
+      // 답만 끊기고 실제로는 올라간 것이 있을 수 있어, 목록을 새로 받아 확인합니다(다시 올려서 두 장이 되는 일을 막음).
+      try { await refresh(true); } catch (e) {}
+      for (const en of todo) {
+        if (!en.failed) continue;
+        const got = S.items.find(x => x.n === cleanName(en.file.name) && x.z === en.file.size);
+        if (!got) continue;
+        en.failed = false; bad--; ok++; if (got.k !== 'v') okPhotos++;
+        en.state = 'ok'; en.note = '올렸어요 (다시 확인함)'; en.stEl.className = 'st ok'; en.stEl.textContent = en.note;
+      }
     }
     running = false; done = true; ctl.setBusy(false);
     try { if (awake) awake.release(); } catch (e) {}
     msg.className = 'form-msg' + (bad ? '' : ' ok');
     msg.textContent = `${ok}개를 올렸어요.` + (bad ? ` ${bad}개는 올리지 못했어요.` : '');
     go.hidden = true; choose.hidden = true;
-    actions.append(h('button', { type: 'button', class: 'btn primary', onclick: () => ctl.close() }, '사진첩에서 보기'));
+    actions.append(h('button', { type: 'button', class: 'btn primary', onclick: () => ctl.done() }, '사진첩에서 보기'));
     if (ok) tell.replaceWith(notifyBox(okPhotos, ok - okPhotos, cap.value.trim()));
     S.loaded = true; renderAll();
     if (missing && !S.demo) fillMissing();
@@ -1671,7 +1808,7 @@ function openUpload() {
   const tell = h('div', { hidden: true });
   const ctl = openSheet('사진 올리기', h('div', { class: 'stack' }, pick, bar, msg, tell, total, list,
     h('div', { class: 'field' }, h('label', { for: 'up-cap', text: '설명 (고른 사진 모두에 같이 붙습니다 · 안 써도 돼요)' }), cap)),
-    { foot: [choose, go] });
+    { foot: [choose, go], dirty: () => !done && entries.some(e => !e.dup) });
   const actions = ctl.foot;
   draw();
 }
@@ -1710,7 +1847,12 @@ async function fillMissing() {
 }
 
 /* ───────── 고치기 · 지우기 ───────── */
+/** 지우기 전에 묻는 말. 서버 1.6부터는 30일 동안 사진첩 안에서 되살릴 수 있습니다. */
+const binWords = () => (S.demo || newer('1.6')
+  ? '30일 동안은 "설정 → 사진첩 관리 → 최근 지운 것"에서 되살릴 수 있어요.'
+  : '구글 드라이브 휴지통에 30일 동안 남아 있어서 그 안에는 되살릴 수 있어요.');
 function openEdit(it) {
+  const what = it.k === 'v' ? '영상' : '사진';
   const cap = h('textarea', { class: 'input', id: 'ed-cap', maxlength: '500' }); cap.value = it.c || '';
   const date = h('input', { class: 'input', id: 'ed-date', type: 'date', value: it.d, max: '2100-12-31' });
   const star = h('input', { type: 'checkbox', id: 'ed-star', checked: !!it.s });
@@ -1720,15 +1862,15 @@ function openEdit(it) {
   const msg = h('p', { class: 'form-msg', role: 'alert' });
   const save = h('button', { type: 'submit', class: 'btn primary', form: 'ed-form' }, '저장');
   const del = h('button', { type: 'button', class: 'btn danger', onclick: async () => {
-    if (!(await ask('사진 지우기', '이 사진을 사진첩에서 지울까요? 구글 드라이브 휴지통에 30일 동안 남아 있어서 그 안에는 되살릴 수 있어요.', '지우기', true))) return;
+    if (!(await ask(`${what} 지우기`, `이 ${what}을 사진첩에서 지울까요? ${binWords()}`, '지우기', true))) return;
     del.disabled = save.disabled = true;
     try {
       await api('delete', { id: it.id }, 1);
       S.items = S.items.filter(x => x.id !== it.id);
-      DB.del('img', 't:' + it.id); DB.del('img', 'v:' + it.id);
-      ctl.close(); if (V.open) closeViewer(); renderAll(true); toast('사진을 지웠어요.');
+      if (!S.demo) forget([it.id]);
+      ctl.done(); if (V.open) closeViewer(); renderAll(true); toast(`${what}을 지웠어요.`);
     } catch (e) { msg.textContent = e.message; del.disabled = save.disabled = false; }
-  } }, '이 사진 지우기');
+  } }, `이 ${what} 지우기`);
   const form = h('form', {
     id: 'ed-form',
     onsubmit: async e => {
@@ -1737,7 +1879,7 @@ function openEdit(it) {
         const r = await api('edit', { id: it.id, caption: cap.value.trim(), date: date.value || it.d, star: star.checked, moment: moment.value.trim() }, 1);
         Object.assign(it, r.item);
         const mine = S.items.find(x => x.id === it.id); if (mine && mine !== it) Object.assign(mine, r.item);
-        ctl.close(); renderAll(true); if (V.open) showSlide(); toast('고쳤어요.');
+        ctl.done(); renderAll(true); if (V.open) showSlide(); toast('고쳤어요.');
       } catch (err) { msg.textContent = err.message; save.disabled = false; }
     }
   },
@@ -1747,7 +1889,8 @@ function openEdit(it) {
     h('div', { class: 'field' }, h('label', { for: 'ed-moment', text: '첫 순간 (기념할 일이면 적어 주세요)' }), moment, chips,
       h('p', { class: 'hint', text: '적어 두면 아래 단추 줄의 "첫 순간"에 날짜 순서로 모입니다.' })),
     msg);
-  const ctl = openSheet('사진 고치기', form, { foot: [save, del] });
+  const ctl = openSheet(`${what} 고치기`, form, { foot: [save, del],
+    dirty: () => cap.value.trim() !== (it.c || '') || (date.value || it.d) !== it.d || star.checked !== !!it.s || moment.value.trim() !== (it.m || '') });
 }
 
 /* ───────── 외장하드에 보관(백업) ───────── */
@@ -1901,46 +2044,127 @@ async function openBackup() {
 }
 
 /* ───────── 설정 ───────── */
+/** 가족 원본 저장을 켜거나 끈 뒤, 영상의 내려받기 단추(구글 드라이브 재생기)도 거기에 맞춥니다. */
+async function matchVideos(msg) {
+  if (S.demo || !S.items.some(x => x.k === 'v')) return;
+  try {
+    let left = Infinity;
+    for (let i = 0; i < 100; i++) {
+      const q = await api('videos', { op: 'lock' }, 2);
+      if (!q.left) { msg.textContent = '저장했어요. 영상의 내려받기 단추도 맞춰 두었습니다.'; return; }
+      if (!q.done && q.left >= left) { msg.className = 'form-msg'; msg.textContent = `저장했어요. 다만 영상 ${q.left}개는 구글 드라이브가 내려받기 단추 설정을 받아 주지 않았어요. 나중에 다시 저장해 보세요.`; return; }
+      left = q.left; msg.textContent = `저장했어요. 영상의 내려받기 단추를 맞추는 중이에요… (${q.left}개 남음)`;
+    }
+  } catch (e) {
+    if (e.code === 'bad_request') msg.textContent = '저장했어요. (영상의 내려받기 단추를 숨기는 것은 저장 서버 1.6부터 됩니다.)';
+    else { msg.className = 'form-msg'; msg.textContent = '저장은 했지만 영상의 내려받기 단추는 맞추지 못했어요. ' + e.message; }
+  }
+}
+/** 영상을 구글 드라이브 안에서 복사해 새 주소를 받고, 예전 주소는 닫습니다(가족 링크를 새로 만든 뒤에 씁니다). */
+async function reissueVideos() {
+  const vids = S.items.filter(x => x.k === 'v');
+  if (!vids.length) return toast('사진첩에 영상이 없어요.');
+  const size = vids.reduce((a, x) => a + (x.z || 0), 0);
+  if (!(await ask('영상 주소 새로 바꾸기', `영상 ${vids.length}개(모두 ${sizeText(size)})를 구글 드라이브 안에서 복사해 새 주소를 받고, 예전 것은 공유를 끊어 휴지통으로 보냅니다. 예전 주소로는 더 이상 영상이 열리지 않아요. 예전 것은 30일 동안 휴지통에 남아 그만큼 저장 공간을 더 차지합니다. 영상이 많으면 몇 분 걸려요. 계속할까요?`, '새로 바꾸기', true))) return;
+  const bar = h('div', { class: 'bar' }, h('i')), line = h('p', { text: `영상 ${vids.length}개의 주소를 바꾸는 중이에요. 끝날 때까지 이 창을 그대로 두세요.` });
+  const body = h('div', { class: 'stack', id: 're-body' }, line, bar);
+  const ctl = openSheet('영상 주소를 바꾸는 중', body, { small: true }); ctl.setBusy(true);
+  // 중간에 끊겼다가 다시 누르면 남은 것부터 이어서 합니다(같은 작업 번호를 6시간 동안 기억).
+  let round = Number(store.get('reround', 0)) || 0;
+  if (!round || Date.now() - round > 6 * 3600000) { round = Date.now(); store.set('reround', round); }
+  let left = vids.length, fails = 0, open = 0;
+  try {
+    while (left > 0) {
+      let q;
+      try { q = await api('videos', { op: 'reissue', round }, 1); }
+      catch (e) { if ((!SOFT.includes(e.code) && e.code !== 'busy') || ++fails > 5) throw e; await sleep(3000 * fails); continue; }
+      if (!q.done && q.left >= left) { if (++fails > 3) throw fail('stuck', '구글 드라이브가 영상을 복사하지 못하고 있어요.'); } else fails = 0;
+      left = q.left; open += q.open || 0;
+      bar.firstChild.style.width = ((vids.length - left) / vids.length * 100).toFixed(0) + '%';
+      line.textContent = `영상 주소를 바꾸는 중이에요… ${vids.length - left} / ${vids.length}`;
+    }
+    store.del('reround'); ctl.setBusy(false);
+    if (open) {
+      // 새 주소는 받았지만 예전 것의 공유를 끄지 못한 경우: 숨기지 않고 알려 줍니다
+      body.textContent = '';
+      body.append(h('p', { class: 'box warn', text: `영상 ${vids.length}개의 주소는 새로 바꿨어요. 다만 예전 영상 ${open}개는 구글 드라이브가 공유 끄기를 받아 주지 않아, 휴지통에 있는 30일 동안은 예전 주소로 열릴 수 있습니다. 바로 막으려면 구글 드라이브의 휴지통을 비워 주세요.` }),
+        h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn primary', onclick: () => ctl.close() }, '확인')));
+      await refresh(true);
+    } else { ctl.close(); await refresh(true); toast(`영상 ${vids.length}개의 주소를 새로 바꿨어요.`); }
+  } catch (e) {
+    ctl.setBusy(false); body.textContent = '';
+    body.append(h('p', { class: 'box warn', text: e.code === 'bad_request'
+      ? '이 기능은 저장 서버를 새 버전(1.6)으로 올린 뒤부터 쓸 수 있어요. 구글 앱스 스크립트에서 서버 코드를 바꾸고 "배포 관리 → 새 버전"으로 한 번만 올려 주세요.'
+      : `모두 바꾸지는 못했어요(남은 것 ${left}개). ${e.message} 조금 뒤에 다시 누르면 남은 것부터 이어서 합니다.` }),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn primary', onclick: () => ctl.close() }, '확인')));
+    if (e.code !== 'bad_request') await refresh(true);
+  }
+}
+/** 구글 저장 공간이 얼마 안 남았는지 하루에 한 번 확인합니다(엄마·아빠 화면에서만). */
+async function checkSpace() {
+  if (S.demo || S.spaceBusy) return;
+  if (Date.now() - (Number(store.get('spaceAt', 0)) || 0) < DAY) {
+    const kept = Number(store.get('spaceLow', 0)) || 0;
+    if (kept !== (S.lowSpace || 0)) { S.lowSpace = kept; renderHero(); }
+    return;
+  }
+  S.spaceBusy = true;
+  try {
+    const r = await api('info', {}, 1), free = r.limit ? Math.max(0, r.limit - r.used) : 0;
+    const low = r.limit && (free < 5 * 1073741824 || free < r.limit * 0.05) ? Math.max(1, free) : 0;
+    store.set('spaceAt', Date.now()); store.set('spaceLow', low);
+    if (low !== (S.lowSpace || 0)) { S.lowSpace = low; renderHero(); }
+  } catch (e) {}
+  S.spaceBusy = false;
+}
+/** 엄마·아빠에게만: 외장하드에 보관하지 않은 것이 쌓였을 때, 구글 저장 공간이 얼마 안 남았을 때 첫 화면에서 알려 줍니다. */
+function keepHints() {
+  if (!S.master || S.demo || !S.loaded) return [];
+  const out = [], later = k => Date.now() > (Number(store.get(k, 0)) || 0);
+  const snooze = (k, id) => h('button', { type: 'button', class: 'btn small quiet', id, onclick: () => { store.set(k, Date.now() + 7 * DAY); renderHero(); } }, '일주일 뒤에 다시 알려 주기');
+  const last = S.settings.lastBackup || 0, fresh = S.items.filter(x => (x.u || 0) > last);
+  if (fresh.length && later('keepLater')) {
+    const oldest = fresh.reduce((a, x) => Math.min(a, x.u || a), Date.now());
+    if (fresh.length >= 20 || Date.now() - oldest > 14 * DAY) out.push(h('div', { class: 'home-hint', id: 'keep-hint' },
+      h('p', { text: `외장하드에 아직 보관하지 않은 것이 ${fresh.length}개 있어요.` + (last ? '' : ' 아직 한 번도 보관하지 않았습니다.') + ' 컴퓨터의 크롬에서 보관할 수 있어요.' }),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn small primary', id: 'keep-open', onclick: () => openBackup() }, '보관하기'), snooze('keepLater', 'keep-later'))));
+  }
+  if (S.lowSpace && later('spaceLater')) out.push(h('div', { class: 'home-hint', id: 'space-hint' },
+    h('p', { text: `구글 저장 공간이 ${sizeText(S.lowSpace)}밖에 남지 않았어요. 가득 차면 새 사진과 영상을 올릴 수 없습니다.` }),
+    h('div', { class: 'row' }, snooze('spaceLater', 'space-later'))));
+  return out;
+}
+
+/* ───────── 사진첩 관리 ───────── */
 async function openSettings() {
   let st = S.settings;
   const field = (id, label, input, hint) => h('div', { class: 'field' }, h('label', { for: id, text: label }), input, hint ? h('p', { class: 'hint', text: hint }) : null);
   const title = h('input', { class: 'input', id: 'st-title', type: 'text', maxlength: '40', value: st.title });
-  const name = h('input', { class: 'input', id: 'st-name', type: 'text', maxlength: '20', value: st.name });
-  const due = h('input', { class: 'input', id: 'st-due', type: 'date', value: st.due || '' });
-  const born = h('input', { class: 'input', id: 'st-born', type: 'date', value: st.born || '' });
   const hello = h('textarea', { class: 'input', id: 'st-hello', maxlength: '200' }); hello.value = st.hello || '';
   const famOrig = h('input', { type: 'checkbox', id: 'st-famorig', checked: st.famOrig !== 0 });
-  // 아기 이름을 바꾸면 사진첩 이름·인사말 속의 예전 이름도 함께 바꿔 보여 줍니다(직접 고친 칸은 건드리지 않습니다).
-  let titleMine = false, helloMine = false;
-  title.addEventListener('input', () => { titleMine = true; });
-  hello.addEventListener('input', () => { helloMine = true; });
-  name.addEventListener('input', () => {
-    const nv = name.value.trim() || st.name;
-    if (!titleMine) title.value = swapName(st.title, st.name, nv).slice(0, 40);
-    if (!helloMine) hello.value = swapName(st.hello || '', st.name, nv).slice(0, 200);
-  });
   const msg = h('p', { class: 'form-msg', role: 'alert' });
   const form = h('form', {
     onsubmit: async e => {
       e.preventDefault(); msg.textContent = ''; msg.className = 'form-msg';
+      const wasOn = st.famOrig !== 0;
       try {
-        const r = await api('settings', { settings: { title: title.value.trim(), name: name.value.trim(), due: due.value, born: born.value, hello: hello.value.trim(), famOrig: famOrig.checked } }, 1);
+        const r = await api('settings', { settings: { title: title.value.trim(), hello: hello.value.trim(), famOrig: famOrig.checked } }, 1);
         S.settings = { ...DEFAULTS, ...r.settings }; renderAll(true);
-        st = S.settings; titleMine = helloMine = false;
+        st = S.settings;
         msg.className = 'form-msg ok'; msg.textContent = '저장했어요.';
+        if (wasOn !== (st.famOrig !== 0)) await matchVideos(msg);
       } catch (err) { msg.textContent = err.message; }
     }
   },
-    h('h3', { text: '아기 정보' }),
+    h('h3', { text: '사진첩 정보' }),
     field('st-title', '사진첩 이름', title),
-    field('st-name', '아기 이름', name, '이름을 바꾸면 아래 사진첩 이름과 인사말 속의 이름도 함께 바뀝니다. 어색한 곳은 직접 고쳐 주세요.'),
-    field('st-due', '출산 예정일', due),
-    field('st-born', '태어난 날', born, '태어나면 적어 주세요. "태어난 지 며칠", "백일까지 며칠"이 자동으로 나옵니다.'),
     field('st-hello', '가족에게 건네는 인사말 (안 써도 돼요)', hello),
-    h('div', { class: 'field' }, h('label', { class: 'check' }, famOrig, '가족도 사진을 원본으로 저장할 수 있게 하기'),
-      h('p', { class: 'hint', text: '끄면 가족은 보기용(용량 작게)으로만 저장할 수 있어요. 원본에는 찍은 곳 같은 정보가 함께 들어 있을 수 있습니다. 서버 1.4부터 적용됩니다.' })),
+    h('div', { class: 'field' }, h('label', { class: 'check' }, famOrig, '가족도 원본으로 저장할 수 있게 하기'),
+      h('p', { class: 'hint', text: '끄면 가족은 사진을 보기용(용량 작게)으로만 저장할 수 있고, 영상은 재생기의 내려받기 단추가 숨겨집니다. 원본에는 찍은 곳 같은 정보가 함께 들어 있을 수 있어요. 화면을 따로 찍거나 녹화하는 것까지 막지는 못합니다.' })),
+    h('p', { class: 'hint', text: '아기 이름·출산 예정일·태어난 날은 "설정 → 우리 아기"에서 고칩니다.' }),
     msg, h('button', { type: 'submit', class: 'btn primary' }, '저장'));
 
+  const hasVideo = () => S.items.some(x => x.k === 'v');
   const linkArea = h('textarea', { class: 'link-box', id: 'st-link', readonly: true, 'aria-label': '가족 링크' }); linkArea.value = S.demo ? '(예시 화면에는 가족 링크가 없습니다)' : familyLink();
   const linkMsg = h('p', { class: 'form-msg', role: 'alert' });
   const share = h('div', { class: 'stack' },
@@ -1950,20 +2174,31 @@ async function openSettings() {
     h('div', { class: 'row' },
       h('button', { type: 'button', class: 'btn primary', onclick: () => copyText(linkArea.value, linkArea), disabled: S.demo }, '링크 복사'),
       h('button', { type: 'button', class: 'btn', disabled: S.demo, onclick: async () => {
-        if (!(await ask('새 링크 만들기', '새 링크를 만들면 지금까지 보낸 링크로는 더 이상 사진첩이 열리지 않습니다. 가족 모두에게 새 링크를 다시 보내야 해요. 계속할까요?', '새 링크 만들기', true))) return;
-        try { const r = await api('newKey', {}, 1); S.cfg.key = r.key; putHash(); linkArea.value = familyLink(); linkMsg.className = 'form-msg ok'; linkMsg.textContent = '새 링크를 만들었어요. 가족에게 다시 보내 주세요.'; }
+        if (!(await ask('새 링크 만들기', '새 링크를 만들면 지금까지 보낸 링크로는 더 이상 사진첩이 열리지 않습니다. 가족 모두에게 새 링크를 다시 보내야 해요.' + (hasVideo() ? ' 영상은 주소가 따로 있어서, 예전 사람이 영상까지 못 보게 하려면 새 링크를 만든 뒤 "영상 주소 새로 바꾸기"도 눌러야 합니다.' : '') + ' 계속할까요?', '새 링크 만들기', true))) return;
+        try { const r = await api('newKey', {}, 1); S.cfg.key = r.key; putHash(); linkArea.value = familyLink(); linkMsg.className = 'form-msg ok'; linkMsg.textContent = '새 링크를 만들었어요. 가족에게 다시 보내 주세요.' + (hasVideo() ? ' 영상까지 막으려면 아래 "영상 주소 새로 바꾸기"를 눌러 주세요.' : ''); }
         catch (e) { linkMsg.className = 'form-msg'; linkMsg.textContent = e.message; }
       } }, '새 링크 만들기 (예전 링크 끊기)')),
-    linkMsg);
+    linkMsg,
+    h('div', { class: 'stack', id: 'st-videos', hidden: !hasVideo() },
+      h('p', { class: 'hint', text: '영상은 구글 드라이브 재생기로 틀기 때문에, 영상마다 "주소를 아는 사람은 볼 수 있는" 상태로 열려 있습니다. 그래서 새 링크를 만들어도, 전에 사진첩을 본 사람이 영상 주소를 따로 알고 있으면 영상은 계속 볼 수 있어요. 그것까지 막으려면 아래 단추로 영상 주소를 새로 바꿉니다.' }),
+      h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', id: 'st-reissue', disabled: S.demo, onclick: () => reissueVideos() }, '영상 주소 새로 바꾸기'))));
 
   const spaceBox = h('p', { class: 'box', text: '저장 공간을 확인하는 중…' });
   const spaceBar = h('div', { class: 'bar', hidden: true }, h('i'));
   const folder = h('a', { class: 'btn small', target: '_blank', rel: 'noopener', hidden: true }, '구글 드라이브에서 사진 폴더 열기');
   const space = h('div', { class: 'stack' }, h('h3', { text: '저장 공간' }), spaceBox, spaceBar, h('div', { class: 'row' }, folder));
   const verLine = h('p', { class: 'hint', id: 'st-ver', text: '화면 버전 ' + APP_VERSION });
+  const pinLine = h('p', { class: 'hint', id: 'st-pin', text: S.demo ? '' : SERVER_PIN && pinOf(S.cfg.s) === SERVER_PIN
+    ? '이 화면은 정해진 저장 서버에만 연결합니다. 다른 서버를 가리키는 링크는 열지 않아요.'
+    : '서버 지문: ' + pinOf(S.cfg.s) });
+  const statLine = h('p', { class: 'hint', id: 'st-stats', hidden: true });
+  const binBtn = h('button', { type: 'button', class: 'btn', id: 'st-bin', onclick: () => openBin() }, '최근 지운 것 보기');
+  const bin = h('div', { class: 'stack' }, h('h3', { text: '최근 지운 것' }),
+    h('p', { class: 'hint', text: '지운 사진과 영상은 30일 동안 남아 있어서, 그 안에는 설명·날짜까지 그대로 되살릴 수 있습니다.' }),
+    h('div', { class: 'row' }, binBtn));
   const check = h('div', { class: 'stack' }, h('h3', { text: '사진첩 점검' }),
     h('p', { class: 'hint', text: '목록에 적힌 사진과 구글 드라이브의 파일이 서로 맞는지 살펴봅니다. 목록이 바뀌는 날마다 자동으로 남겨 둔 목록 사본으로 되돌릴 수도 있습니다.' }),
-    h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', id: 'st-check', onclick: () => openCheck() }, '사진첩 점검하기')));
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', id: 'st-check', onclick: () => openCheck() }, '사진첩 점검하기')), statLine);
 
   const p0 = h('input', { class: 'input', id: 'st-p0', type: 'password', autocomplete: 'current-password' });
   const p1 = h('input', { class: 'input', id: 'st-p1', type: 'password', autocomplete: 'new-password' });
@@ -1980,11 +2215,12 @@ async function openSettings() {
     }
   },
     h('h3', { text: '엄마·아빠 암호 바꾸기' }),
+    h('p', { class: 'hint', text: '예정일·생일·전화번호처럼 남이 짐작할 수 있는 것은 피해 주세요. 바꾸면 다른 기기의 로그인은 모두 끊깁니다(휴대폰을 잃어버렸을 때도 이렇게 하면 됩니다).' }),
     field('st-p0', '지금 쓰는 암호', p0), field('st-p1', '새 암호 (6글자 이상)', p1),
     pwMsg, h('button', { type: 'submit', class: 'btn' }, '암호 바꾸기'));
 
-  openSheet('사진첩 관리', h('div', { class: 'stack' }, form, h('hr'), share, h('hr'), space, h('hr'), check, h('hr'), pw, verLine));
-  api('status', {}, 2).then(v => { if (v && v.version) verLine.textContent = `화면 버전 ${APP_VERSION} · 서버 버전 ${v.version}`; }).catch(() => {});
+  openSheet('사진첩 관리', h('div', { class: 'stack' }, form, h('hr'), share, h('hr'), bin, h('hr'), space, h('hr'), check, h('hr'), pw, verLine, pinLine));
+  api('status', {}, 2).then(v => { if (v && v.version) { S.serverVer = v.version; verLine.textContent = `화면 버전 ${APP_VERSION} · 서버 버전 ${v.version}`; } }).catch(() => {});
   try {
     const r = await api('info', {}, 2);
     const mine = S.items.reduce((a, x) => a + (x.z || 0), 0);
@@ -1993,7 +2229,62 @@ async function openSettings() {
       : `이 사진첩의 원본은 ${S.items.length}개 · ${sizeText(mine)}입니다.`);
     if (r.limit) { spaceBar.hidden = false; spaceBar.firstChild.style.width = Math.min(100, r.used / r.limit * 100).toFixed(1) + '%'; }
     if (r.folderUrl) { folder.href = r.folderUrl; folder.hidden = false; }
+    if (r.bin) binBtn.textContent = `최근 지운 것 보기 (${r.bin}개)`;
+    if (r.stats) {
+      // 평소와 다르게 요청이 몰리거나 틀린 열쇠·암호가 많으면 엄마·아빠가 알아챌 수 있게 보여 줍니다.
+      const t = r.stats, odd = t.nokey >= 100 || t.badpw >= 10 || t.all >= 5000;
+      statLine.hidden = false; statLine.className = odd ? 'box warn' : 'hint';
+      statLine.textContent = `최근 ${t.hours}시간 동안 저장 서버가 받은 요청은 약 ${t.all.toLocaleString('ko-KR')}번입니다(열쇠가 맞지 않는 요청 ${t.nokey.toLocaleString('ko-KR')}번 · 암호 틀림 ${t.badpw.toLocaleString('ko-KR')}번).`
+        + (odd ? ' 평소보다 많아요. 누군가 일부러 시도하는 것일 수 있으니 "새 링크 만들기"와 "암호 바꾸기"를 해 주세요. 그래도 계속되면 설치 안내의 "비상시: 서버 주소 바꾸기"를 따라 주세요.' : '');
+    }
   } catch (e) { spaceBox.textContent = '저장 공간을 확인하지 못했어요. ' + e.message; }
+}
+/* ───────── 최근 지운 것: 30일 안에 되살리기 (엄마·아빠만) ───────── */
+async function openBin() {
+  const body = h('div', { class: 'stack' });
+  const ctl = openSheet('최근 지운 것', body);
+  const note = (cls, text) => h('p', { class: 'box' + (cls ? ' ' + cls : ''), text });
+  const load = async said => {
+    body.textContent = ''; body.append(note('', '불러오는 중이에요…'));
+    let r;
+    try { r = await api('bin', { op: 'list' }, 2); }
+    catch (e) {
+      body.textContent = '';
+      body.append(note('warn', e.code === 'bad_request'
+        ? '이 기능은 저장 서버를 새 버전(1.6)으로 올린 뒤부터 쓸 수 있어요. 구글 앱스 스크립트에서 서버 코드를 바꾸고 "배포 관리 → 새 버전"으로 한 번만 올려 주세요. 그 전에 지운 것은 구글 드라이브 휴지통에 30일 동안 남아 있습니다.'
+        : '불러오지 못했어요. ' + e.message));
+      return;
+    }
+    const days = r.days || 30, items = (r.items || []).slice().sort((x, y) => (y.del || 0) - (x.del || 0));
+    body.textContent = '';
+    if (said) body.append(note(said.bad ? 'warn' : 'ok', said.text));
+    if (!items.length) { body.append(note('', `최근 ${days}일 안에 지운 것이 없어요.`)); return; }
+    body.append(h('p', { class: 'hint', text: `지운 뒤 ${days}일 동안 여기에서 되살릴 수 있어요. 그 뒤에는 구글 드라이브에서도 완전히 지워집니다.` }));
+    packWait.clear();                              // 지운 것의 작은 그림은 묶음에 남아 있으므로, 묶음을 다시 받아 보여 줍니다
+    const restore = async (ids, btn) => {
+      btn.disabled = true; ctl.setBusy(true);
+      try {
+        const q = await api('bin', { op: 'restore', ids }, 1); ctl.setBusy(false);
+        if (S.demo) { applyIndex({ ...Demo.idx, items: Demo.idx.items.map(x => ({ ...x })) }); renderAll(true); } else await refresh(true);
+        const lost = (q.failed || []).length;
+        load(lost ? { bad: true, text: (q.done ? `${q.done}개를 되살렸어요. ` : '') + `${lost}개는 구글 드라이브에서 이미 완전히 지워져 되살릴 수 없어요.` } : { text: `${q.done}개를 되살렸어요. 사진첩에 다시 보입니다.` });
+      } catch (e) { ctl.setBusy(false); btn.disabled = false; toast('되살리지 못했어요. ' + e.message); }
+    };
+    if (items.length > 1) body.append(h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn', id: 'bin-all', onclick: e => restore(items.slice(0, 50).map(x => x.id), e.currentTarget) }, `모두 되살리기 (${Math.min(50, items.length)}개)`)));
+    for (const it of items) {
+      const img = h('img', { alt: '', decoding: 'async', hidden: true }), ph = h('span', { class: 'ph', text: it.k === 'v' ? '영상' : '사진' });
+      getThumb(it).then(url => { if (url) { img.src = url; img.hidden = false; ph.hidden = true; } }).catch(() => {});
+      const leftDays = Math.max(0, Math.ceil(((it.del || 0) + days * DAY - Date.now()) / DAY));
+      body.append(h('div', { class: 'bin-row' },
+        h('span', { class: 'pic' }, ph, img),
+        h('div', { class: 'bin-text' },
+          h('b', { text: `${it.k === 'v' ? '영상' : '사진'} · ${koShort(it.d)}` + (it.m ? ` · ${it.m}` : '') }),
+          it.c ? h('span', { text: it.c }) : null,
+          h('span', { class: 'hint', text: `${koShort(ymd(new Date(it.del || Date.now())))}에 지움 · ${leftDays}일 남음` })),
+        h('button', { type: 'button', class: 'btn small', onclick: e => restore([it.id], e.currentTarget) }, '되살리기')));
+    }
+  };
+  load();
 }
 /* ───────── 여러 개 한꺼번에 고치기 · 지우기 (엄마·아빠만) ───────── */
 function pickMode(on) {
@@ -2044,7 +2335,7 @@ function pickEdit() {
       go.disabled = true; bar.hidden = false; ctl.setBusy(true);
       try {
         const n = await runMany('editMany', ids, change, (a, b) => { bar.firstChild.style.width = (a / b * 100).toFixed(0) + '%'; });
-        ctl.setBusy(false); ctl.close(); S.pick = null; await refresh(true); renderFilters(); renderList(true); toast(`${n}개를 고쳤어요.`);
+        ctl.setBusy(false); ctl.done(); S.pick = null; await refresh(true); renderFilters(); renderList(true); toast(`${n}개를 고쳤어요.`);
       } catch (err) { ctl.setBusy(false); go.disabled = false; msg.textContent = '고치지 못했어요. ' + err.message; await refresh(true); }
     }
   },
@@ -2052,11 +2343,11 @@ function pickEdit() {
     h('div', { class: 'field' }, h('label', { class: 'check' }, useCap, '설명을 이렇게 바꾸기'), cap),
     h('div', { class: 'field' }, h('label', { class: 'check' }, useDate, '찍은 날을 이렇게 바꾸기'), date),
     bar, msg, go);
-  const ctl = openSheet(`고른 ${ids.length}개 고치기`, form);
+  const ctl = openSheet(`고른 ${ids.length}개 고치기`, form, { dirty: () => useCap.checked || useDate.checked });
 }
 async function pickDelete() {
   const ids = S.pick ? [...S.pick] : []; if (!ids.length) return;
-  if (!(await ask('여러 개 지우기', `고른 ${ids.length}개를 사진첩에서 지울까요? 구글 드라이브 휴지통에 30일 동안 남아 있어서 그 안에는 되살릴 수 있어요.`, `${ids.length}개 지우기`, true))) return;
+  if (!(await ask('여러 개 지우기', `고른 ${ids.length}개를 사진첩에서 지울까요? ${binWords()}`, `${ids.length}개 지우기`, true))) return;
   const bar = h('div', { class: 'bar' }, h('i')), body = h('div', { class: 'stack' }, h('p', { text: '지우는 중이에요. 잠시만 기다려 주세요.' }), bar);
   const ctl = openSheet('지우는 중', body, { small: true }); ctl.setBusy(true);
   try {
@@ -2108,14 +2399,15 @@ async function openImport() {
       msg.textContent = '';
       if (rows.some(x => !x.date.value)) { msg.textContent = '찍은 날이 비어 있는 것이 있어요.'; return; }
       go.disabled = true; bar.hidden = false; ctl.setBusy(true);
-      let added = 0;
+      let added = 0; const missed = [];
       try {
         for (let i = 0; i < rows.length; i += 10) {
           const q = await api('import', { op: 'add', caption: cap.value.trim(), files: rows.slice(i, i + 10).map(x => ({ id: x.f.id, date: x.date.value })) }, 1);
-          added += q.added; bar.firstChild.style.width = (Math.min(rows.length, i + 10) / rows.length * 100).toFixed(0) + '%';
+          added += q.added; missed.push(...(q.failed || [])); bar.firstChild.style.width = (Math.min(rows.length, i + 10) / rows.length * 100).toFixed(0) + '%';
         }
         ctl.setBusy(false); await refresh(true);
-        load(`${added}개를 사진첩에 넣었어요. 미리 보기 그림은 구글 드라이브가 준비하는 대로 채워집니다(영상은 몇 분 걸릴 수 있어요).`);
+        load((added ? `${added}개를 사진첩에 넣었어요. 미리 보기 그림은 구글 드라이브가 준비하는 대로 채워집니다(영상은 몇 분 걸릴 수 있어요).` : '')
+          + (missed.length ? ` ${missed.length}개는 넣지 못해서 그 폴더에 그대로 있어요(${missed.slice(0, 3).join(', ')}${missed.length > 3 ? ' …' : ''}). 조금 뒤에 다시 넣어 주세요.` : ''));
       } catch (e) { ctl.setBusy(false); go.disabled = false; msg.textContent = (added ? `${added}개까지 넣었어요. ` : '') + '넣지 못했어요. ' + e.message; await refresh(true); }
     });
     body.append(h('h3', { text: `넣을 수 있는 것 ${media.length}개` }), ...rows.map(x => x.el),
@@ -2506,7 +2798,7 @@ function openPrefs() {
         h('button', { type: 'button', class: 'btn', id: 'm-growth', onclick: go(openGrowth) }, '성장 기록'),
         h('button', { type: 'button', class: 'btn', id: 'm-settings', onclick: go(openSettings) }, '사진첩 관리'),
         h('button', { type: 'button', class: 'btn quiet', id: 'm-logout', onclick: go(logout) }, '나가기')),
-      h('p', { class: 'hint', text: '성장 기록은 엄마·아빠만 볼 수 있어요. 사진첩 관리에서 예정일·인사말과 암호를 바꾸고, 가족 링크를 새로 만들 수 있습니다.' })]
+      h('p', { class: 'hint', text: '성장 기록은 엄마·아빠만 볼 수 있어요. 사진첩 관리에서 사진첩 이름·인사말과 암호를 바꾸고, 가족 링크를 새로 만들고, 지운 사진을 되살릴 수 있습니다.' })]
     : [h('p', { class: 'hint', text: '사진을 올리고 고치는 것은 엄마·아빠만 할 수 있어요.' }),
       h('button', { type: 'button', class: 'btn', id: 'who', onclick: go(openLogin) }, '엄마·아빠 전용 들어가기')]);
   // 가족 링크 보내기 (엄마·아빠로 들어왔을 때만): 휴대폰에서는 카카오톡 같은 앱으로 바로 보내고, 아니면 복사합니다.
@@ -2530,6 +2822,7 @@ function openPrefs() {
     const st = S.settings;
     const name = h('input', { class: 'input', id: 'b-name', type: 'text', maxlength: '20', value: st.name, autocomplete: 'off', enterkeyhint: 'done' });
     const born = h('input', { class: 'input', id: 'b-born', type: 'date', value: st.born || '', max: '2100-12-31' });
+    const due = h('input', { class: 'input', id: 'b-due', type: 'date', value: st.due || '', max: '2100-12-31' });
     const titleOn = h('input', { type: 'checkbox', id: 'b-title-on', checked: true });
     const titleWords = h('span');
     const titleRow = h('label', { class: 'check' }, titleOn, titleWords);
@@ -2561,7 +2854,7 @@ function openPrefs() {
       onsubmit: async e => {
         e.preventDefault(); msg.className = 'form-msg'; msg.textContent = '';
         if (!nv()) { msg.textContent = '아기 이름을 적어 주세요.'; name.focus(); return; }
-        const send = { name: nv(), born: born.value };
+        const send = { name: nv(), born: born.value, due: due.value };
         if (!also.hidden && !titleRow.hidden && titleOn.checked) send.title = swapName(st.title, st.name, nv()).slice(0, 40);
         if (!also.hidden && !helloField.hidden) send.hello = hello.value.trim();
         save.disabled = true; save.textContent = '저장하는 중…';
@@ -2571,6 +2864,7 @@ function openPrefs() {
           const done = [];
           if (S.settings.name !== st.name) done.push(`이름 ${S.settings.name}`);
           if ((S.settings.born || '') !== (st.born || '')) done.push(S.settings.born ? `태어난 날 ${koShort(S.settings.born)}` : '태어난 날 지움');
+          if ((S.settings.due || '') !== (st.due || '')) done.push(S.settings.due ? `예정일 ${koShort(S.settings.due)}` : '예정일 지움');
           form.replaceWith(babyBox('저장했어요.' + (done.length ? ` (${done.join(' · ')})` : '')));
         } catch (err) { msg.textContent = err.message; save.disabled = false; save.textContent = '저장'; }
       }
@@ -2579,6 +2873,8 @@ function openPrefs() {
       h('div', { class: 'field' }, h('label', { for: 'b-name', text: '아기 이름' }), name,
         h('p', { class: 'hint', text: `이름이 정해지면 바꿔 적어 주세요. 화면에 나오는 "${st.name}"${pick(st.name, '이', '가')} 모두 새 이름으로 바뀝니다.` })),
       also,
+      h('div', { class: 'field' }, h('label', { for: 'b-due', text: '출산 예정일' }), due,
+        h('p', { class: 'hint', text: '태어나기 전까지 "만나기까지 며칠"과 임신 주수를 셀 때 씁니다.' })),
       h('div', { class: 'field' }, h('label', { for: 'b-born', text: '태어난 날' }), born, bornHint),
       msg, h('div', { class: 'seg' }, save));
     draw();
@@ -2657,10 +2953,18 @@ function showWelcome(lead) {
 }
 async function refresh(keep) {
   try {
-    const first = !S.loaded;
-    const { r, idx, changed } = await fetchIndex(3);
+    const first = !S.loaded, hadToken = !!S.token;
+    const got = await fetchIndex(3), { r, idx, changed } = got;
     S.master = !!r.master;
-    if (!S.master && S.token) setToken('');
+    if (!S.master && S.token) { setToken(''); S.expired = hadToken; }       // 로그인 기간이 지났거나 다른 기기에서 암호를 바꾼 경우
+    if (S.master) S.expired = false;
+    if (S.prevKey) {
+      // 방금 누른 링크의 열쇠가 기억하던 것과 달랐던 경우. 엄마·아빠로 들어와 있으면 열쇠가 틀려도 열리므로, 열쇠만으로 열리는지 따로 확인합니다.
+      let ok = true;
+      if (S.master) { try { await api('list', { t: '', since: idx && typeof idx.rev === 'number' ? idx.rev : 0 }, 1); } catch (e) { ok = e.code !== 'no_key'; } }
+      if (!ok) { S.cfg.key = S.prevKey; S.wrongKey = true; }
+      S.prevKey = ''; putHash();
+    }
     if (changed || first) applyIndex(idx);
     if (!S.loaded) {
       S.loaded = true;
@@ -2668,19 +2972,41 @@ async function refresh(keep) {
       if (S.master) S.seenBefore = null;
       store.set('seen', Math.max(newest, S.seenBefore || 0));
     }
-    if (changed) { DB.set('kv', 'index', idx); packWait.clear(); }
+    if (changed) { DB.set('kv', 'index', idx); packWait.clear(); tidy(got); }
     $('#notice').hidden = true;
     if (changed || first || S.drawnAs !== S.master) renderAll(keep); else renderMaster();    // 바뀐 것이 없으면 다시 그리지 않습니다
+    if (changed && V.open) {
+      // 크게 보는 중에 새 목록이 도착한 경우(열자마자 눌렀을 때): 지워진 것은 빼고, 영상 주소가 바뀌었으면 새 주소로 다시 엽니다.
+      const cur = V.list[V.i], byId = new Map(S.items.map(x => [x.id, x]));
+      V.list = V.list.map(x => byId.get(x.id)).filter(Boolean);
+      const j = cur ? V.list.findIndex(x => x.id === cur.id) : -1;
+      if (!V.list.length) closeViewer();
+      else if (j < 0) { V.i = Math.min(V.i, V.list.length - 1); showSlide(); }
+      else { V.i = j; if (V.list[j].o !== cur.o) showSlide(); }
+    }
+    if (S.expired) showNotice('엄마·아빠 로그인이 풀려서 가족 화면으로 보여 드리고 있어요. (들어온 지 60일이 지났거나, 다른 기기에서 암호를 바꾼 경우입니다.)', '다시 들어가기', () => openLogin());
     // 엄마·아빠가 들어와 있을 때, 미리 보기 그림이 아직 없는 사진이 있으면 다시 채워 봅니다.
     if (S.master && S.items.some(x => !x.th || (x.k === 'p' && !x.v))) fillMissing();
+    if (S.master) checkSpace();
+    if (S.master && !S.serverVer && !S.demo) api('status', {}, 1).then(v => { S.serverVer = v.version; }).catch(() => {});
   } catch (e) {
+    if (e.code === 'no_key' && S.prevKey) {
+      // 방금 누른 링크의 열쇠가 맞지 않음: 기억하던 열쇠로 다시 엽니다.
+      S.cfg.key = S.prevKey; S.prevKey = ''; S.wrongKey = true; putHash();
+      return refresh(keep);
+    }
     if (e.code === 'no_key') { await DB.clearAll(); store.del('cfg'); showWelcome('이 링크로는 사진첩이 열리지 않아요. 링크가 새로 바뀌었을 수 있으니, 엄마·아빠에게 새 링크를 보내 달라고 해 주세요.'); }
     else if (e.code === 'not_ready') showWelcome('아직 처음 설정이 끝나지 않은 사진첩이에요.');
     else if (e.code === 'broken_index') {
       if (S.token) { S.master = true; renderMaster(); showNotice('사진첩 목록 파일을 읽지 못했어요. 점검에서 목록 사본으로 되돌릴 수 있습니다.', '사진첩 점검 열기', () => openCheck()); }
       else showNotice('사진첩 목록 파일을 읽지 못했어요. 엄마·아빠에게 알려 주세요.' + (S.items.length ? ' 지금은 지난번에 본 사진을 보여 드리고 있어요.' : ''), '엄마·아빠 전용 들어가기', () => openLogin());
     }
-    else showNotice(S.items.length ? '연결이 잘 안 돼서 지난번에 본 사진을 보여 드리고 있어요.' : '사진첩에 연결하지 못했어요. 인터넷을 확인한 뒤 다시 눌러 주세요.', '다시 불러오기', () => refresh(true));
+    else {
+      const seen = S.items.length ? ' 지금은 지난번에 본 사진을 보여 드리고 있어요.' : '';
+      showNotice(e.code === 'offline' ? '인터넷이 끊겨 있어요.' + (seen || ' 연결된 뒤에 다시 눌러 주세요.')
+        : e.code === 'network' ? (S.items.length ? '연결이 잘 안 돼서 지난번에 본 사진을 보여 드리고 있어요.' : '사진첩에 연결하지 못했어요. 인터넷을 확인한 뒤 다시 눌러 주세요.')
+        : e.message + seen, '다시 불러오기', () => refresh(true));
+    }
   }
 }
 async function enterAlbum() {
@@ -2695,6 +3021,8 @@ async function enterAlbum() {
     try { history.replaceState(history.state, '', linkFor(location.href.split('#')[0])); } catch (e) {}
     if (it) { openViewer(it.id, S.list.some(x => x.id === it.id) ? S.list : [it]); saveCurrent(); }
   }
+  if (S.badLink) showNotice('방금 누른 링크는 이 사진첩의 링크가 아니에요. 모르는 사람이 보낸 링크라면 지워 주세요. 평소 보던 사진첩을 열었습니다.');
+  else if (S.wrongKey && !$('#album').hidden) { S.wrongKey = false; showNotice('방금 누른 링크는 맞지 않아서, 평소 보던 사진첩을 열었어요. 엄마·아빠가 링크를 새로 만들었다면 새 링크를 다시 받아 주세요.'); }
   if (S.other) {
     showNotice('방금 누른 링크는 평소 보던 사진첩과 다른 곳을 가리킵니다. 모르는 사람이 보낸 링크라면 무시하세요.', '그 사진첩으로 바꾸기', async () => {
       if (!(await ask('사진첩 바꾸기', '이 기기에서 보는 사진첩을 방금 누른 링크의 사진첩으로 바꿀까요? 믿을 수 있는 가족이 보낸 링크일 때만 바꾸세요.', '바꾸기', true))) return;
@@ -2711,6 +3039,7 @@ function bindWelcome() {
     e.preventDefault(); msg.textContent = '';
     const s = sFromInput($('#w-url').value);
     if (!s) { msg.textContent = '주소가 올바르지 않아요. 구글 앱스 스크립트에서 복사한 "웹 앱 주소"를 그대로 붙여넣어 주세요.'; return; }
+    if (!pinOk(s)) { msg.textContent = `이 주소는 이 사진첩의 저장 서버가 아니에요. 서버 주소를 새로 만든 것이라면, 화면에 적어 둔 서버 지문을 아래 값으로 바꿔야 열립니다(설치 안내의 "비상시" 참고). 지문: ${pinOf(s)}`; return; }
     S.cfg = { s, api: apiFromS(s), key: '' };
     busy(e.target, true, '확인하는 중…');
     try {
@@ -2874,7 +3203,14 @@ const Demo = {
         this.orig.set(it.id, b.file); idx.items.push(it); return { ok: true, item: { ...it } };
       }
       case 'edit': { const it = find(b.id); if (b.caption !== undefined) it.c = b.caption; if (b.star !== undefined) it.s = b.star ? 1 : 0; if (b.moment !== undefined) it.m = b.moment; if (b.date) it.d = b.date; return { ok: true, item: { ...it } }; }
-      case 'delete': find(b.id); idx.items = idx.items.filter(x => x.id !== String(b.id)); return { ok: true };
+      case 'delete': { const it = find(b.id); idx.items = idx.items.filter(x => x.id !== String(b.id)); (this.bin = this.bin || []).push({ ...it, del: Date.now() }); return { ok: true }; }
+      case 'bin': {
+        this.bin = this.bin || [];
+        if (b.op !== 'restore') return { ok: true, days: 30, items: this.bin.map(x => ({ ...x })) };
+        const back = this.bin.filter(x => b.ids.includes(x.id)); this.bin = this.bin.filter(x => !b.ids.includes(x.id));
+        for (const x of back) { const it = { ...x }; delete it.del; idx.items.push(it); }
+        return { ok: true, done: back.length, failed: [] };
+      }
       case 'settings': Object.assign(idx.settings, b.settings); return { ok: true, settings: { ...idx.settings } };
       case 'info': return { ok: true, used: 71168000000, limit: 214748364800, key: '', folderUrl: '' };
       case 'orig': { const it = idx.items.find(x => x.o === b.id); const blob = it && this.orig.get(it.id); if (!blob) throw fail('not_found', '파일을 찾을 수 없습니다.'); return { ok: true, size: blob.size, data: await blobToB64(blob.slice(b.offset, b.offset + b.length)) }; }
@@ -2975,12 +3311,26 @@ function setupApp() {
   });
   window.addEventListener('online', () => { if (idle()) refresh(true); });
 }
+/** 창을 연 채 새로 고침하면 방문 기록에 '지킴이' 칸이 남습니다. 그대로 두면 뒤로 가기가 한 번 헛돌기 때문에 시작할 때 빼 둡니다. */
+async function dropStaleGuard() {
+  try { if (PREVIEW || !(history.state && history.state.kkumiGuard)) return; } catch (e) { return; }
+  await new Promise(res => {
+    let t = 0;
+    const done = () => { clearTimeout(t); window.removeEventListener('popstate', done); res(); };
+    window.addEventListener('popstate', done);
+    Back.skip++;
+    t = setTimeout(() => { Back.skip = Math.max(0, Back.skip - 1); done(); }, 800);
+    try { history.back(); } catch (e) { Back.skip = Math.max(0, Back.skip - 1); done(); }
+  });
+}
 async function init() {
   bindStatic();
   setupApp();
   if (PREVIEW) return startDemo();
+  await dropStaleGuard();
   readCfg();
-  if (!S.cfg.s) return showWelcome();
+  if (!S.cfg.s) return showWelcome(S.badLink ? '방금 누른 링크는 이 사진첩의 링크가 아니에요. 모르는 사람이 보낸 링크라면 지워 주시고, 가족에게 받은 링크로 다시 들어와 주세요.'
+    : S.badSaved ? '이 기기에 기억해 둔 사진첩이 이 화면이 연결하는 저장 서버와 달라서 열지 않았어요. 가족에게 받은 링크로 다시 들어와 주세요. 그래도 이 화면이 나오면 엄마·아빠에게 알려 주세요.' : '');
   await enterAlbum();
 }
 init();
