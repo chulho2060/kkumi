@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-ojw5MSyGWy9qNLJ27E071S8ERukglGtwKeILke//bKI='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-JqV6ETb3bhpRowBFZTxr0eLkahjg69Sm3yY4bVhqZOc='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -515,7 +515,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.7.0';
+const APP_VERSION = '1.7.1';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -629,7 +629,7 @@ function sFromInput(text) {
 }
 function readCfg() {
   let s = '', k = '';
-  try { const p = new URLSearchParams(location.hash.replace(/^#/, '')); s = sFromInput(p.get('s') || ''); k = p.get('k') || ''; } catch (e) {}
+  try { const p = new URLSearchParams(location.hash.replace(/^#/, '')); s = sFromInput(p.get('s') || ''); k = p.get('k') || ''; S.jump = p.get('save') || ''; } catch (e) {}
   const saved = store.get('cfg', null);
   const fixed = sFromInput(FIXED_SERVER);
   S.other = null;
@@ -1151,9 +1151,17 @@ async function saveCurrent() {
   const body = h('div', { class: 'stack' }, h('p', { class: 'hint', text: '준비하는 중이에요…' })), msg = h('p', { class: 'form-msg', role: 'alert' });
   const ctl = openSheet(video ? '영상 저장' : '사진 저장', body, { small: true });
   const choice = (id, title, sub, onclick, primary) => h('button', { type: 'button', class: 'btn choice' + (primary ? ' primary' : ''), id, onclick }, h('b', { text: title }), h('span', { text: sub }));
-  const kakaoNote = () => (KAKAO ? h('div', { class: 'stack' },
-    h('p', { class: 'hint', text: '카카오톡 안에서 열린 화면에서는 저장이 안 될 수 있어요. 안 되면 아래 단추로 인터넷 앱에서 연 뒤 다시 저장해 주세요.' }),
-    h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn small', id: 'sv-out', onclick: openOutside }, '인터넷 앱으로 열기'))) : null);
+  if (KAKAO) {
+    // 카카오톡 안에서 열린 화면은 파일을 휴대폰에 내려받지 못합니다("지원하지 않는 파일 형식"). 그래서 인터넷 앱으로 넘깁니다.
+    const what = video ? '영상' : '사진';
+    body.textContent = '';
+    body.append(h('p', { class: 'box warn', text: `카카오톡 안에서 열린 화면에서는 ${what}을 휴대폰에 저장할 수 없어요. 휴대폰의 인터넷 앱(크롬, 삼성 인터넷)으로 열면 저장할 수 있습니다.` }),
+      h('ol', { class: 'steps' }, h('li', { text: '아래 단추를 눌러 인터넷 앱으로 엽니다.' }), h('li', { text: `지금 보던 ${what}과 저장 창이 바로 뜹니다. 거기서 골라 저장하세요.` })),
+      h('button', { type: 'button', class: 'btn primary', id: 'sv-out', 'data-link': outsideLink(it), onclick: () => openOutside(it) }, '인터넷 앱으로 열기'),
+      h('p', { class: 'hint', text: '단추를 눌러도 그대로라면, 화면 오른쪽 아래의 점 세 개(⋮)를 누르고 "다른 브라우저로 열기"를 눌러 주세요.' }));
+    return;
+  }
+  const dataNote = () => (matchMedia('(pointer: coarse)').matches ? h('p', { class: 'hint', id: 'sv-data', text: '와이파이가 아닐 때는 받는 용량만큼 휴대폰 데이터가 쓰여요.' }) : null);
   const done = (blob, name) => {
     let file = null;
     try { file = new File([blob], name, { type: blob.type || mimeOf(name) }); } catch (e) {}
@@ -1205,13 +1213,13 @@ async function saveCurrent() {
       body.append(h('p', { text: `영상은 구글 드라이브에서 원본 그대로 받습니다. (${sizeText(it.z)})` }),
         h('a', { class: 'btn primary', id: 'sv-video', href, target: '_blank', rel: 'noopener', onclick: () => setTimeout(() => ctl.close(), 400) }, '원본 영상 받기'),
         h('p', { class: 'hint', text: '새 창이 열리면 "다운로드"를 눌러 주세요. 용량이 큰 영상은 "바이러스 검사를 할 수 없습니다"라고 물어볼 수 있는데, "무시하고 다운로드"를 누르면 됩니다. 용량이 크니 와이파이에서 받는 것이 좋아요.' }),
-        ...[msg, kakaoNote()].filter(Boolean));
+        msg);
       return;
     }
     body.append(...[
       video ? null : choice('sv-view', '보기용으로 저장', `용량 작게${viewBlob ? ' · ' + sizeText(viewBlob.size) : ''} · 휴대폰으로 보거나 보내기에 좋아요`, saveView, true),
       canOrig ? choice('sv-orig', '원본으로 저장', `찍은 그대로 · ${sizeText(it.z)}` + (video ? '' : ' · 인화하거나 크게 볼 때 좋아요'), saveOrig, video) : null,
-      msg, kakaoNote()].filter(Boolean));
+      msg, dataNote()].filter(Boolean));
   };
   if (!video) {
     viewUrl = (await getView(it).catch(() => null)) || (await getThumb(it).catch(() => null));
@@ -1220,8 +1228,12 @@ async function saveCurrent() {
   draw();
 }
 /** 카카오톡 안에서 열린 화면을 휴대폰의 인터넷 앱(크롬, 삼성 인터넷, 사파리)으로 다시 엽니다. */
-function openOutside() {
+function outsideLink(it) {
   const link = S.cfg && S.cfg.s ? linkFor(location.href.split('#')[0]) : location.href;
+  return link + (it && it.id && link.includes('#') ? '&save=' + encodeURIComponent(it.id) : '');
+}
+function openOutside(it) {
+  const link = outsideLink(it);
   location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(link);
   if (ANDROID) setTimeout(() => { if (document.visibilityState === 'visible') location.href = 'intent://' + link.replace(/^https?:\/\//, '') + '#Intent;scheme=https;end'; }, 1500);
 }
@@ -2420,6 +2432,12 @@ async function enterAlbum() {
   const cached = await DB.get('kv', 'index');
   if (cached && !S.loaded) { applyIndex(cached); renderAll(); }
   await refresh();
+  if (S.jump && !S.other) {
+    // 카카오톡 안에서 "인터넷 앱으로 열기"로 넘어온 경우: 보던 사진을 바로 열고 저장 창을 띄웁니다.
+    const it = S.items.find(x => x.id === S.jump); S.jump = '';
+    try { history.replaceState(history.state, '', linkFor(location.href.split('#')[0])); } catch (e) {}
+    if (it) { openViewer(it.id, S.list.some(x => x.id === it.id) ? S.list : [it]); saveCurrent(); }
+  }
   if (S.other) {
     showNotice('방금 누른 링크는 평소 보던 사진첩과 다른 곳을 가리킵니다. 모르는 사람이 보낸 링크라면 무시하세요.', '그 사진첩으로 바꾸기', async () => {
       if (!(await ask('사진첩 바꾸기', '이 기기에서 보는 사진첩을 방금 누른 링크의 사진첩으로 바꿀까요? 믿을 수 있는 가족이 보낸 링크일 때만 바꾸세요.', '바꾸기', true))) return;
@@ -2660,8 +2678,8 @@ function openHomeGuide() {
   } else if (KAKAO) {
     body.append(h('p', { text: '카카오톡 안에서 열린 화면에서는 꺼내 둘 수 없어요. 휴대폰의 인터넷 앱(크롬, 삼성 인터넷, 사파리)으로 열어야 합니다.' }),
       steps('아래 단추를 눌러 인터넷 앱으로 엽니다.', '새로 열린 화면에서 아래 단추 줄의 "설정"을 누르고 "꺼내 두는 법 보기"를 다시 누릅니다.'),
-      h('button', { type: 'button', class: 'btn primary', id: 'home-out', onclick: openOutside }, '인터넷 앱으로 열기'),
-      h('p', { class: 'hint', text: '단추를 눌러도 그대로라면, 화면 아래(또는 위)의 점 세 개나 공유 그림을 누르고 "다른 브라우저로 열기"를 눌러 주세요.' }));
+      h('button', { type: 'button', class: 'btn primary', id: 'home-out', onclick: () => openOutside() }, '인터넷 앱으로 열기'),
+      h('p', { class: 'hint', text: '단추를 눌러도 그대로라면, 화면 오른쪽 아래의 점 세 개(⋮)를 누르고 "다른 브라우저로 열기"를 눌러 주세요.' }));
   } else if (IOS) {
     body.append(steps('화면 아래 가운데의 공유 단추(네모에서 화살표가 위로 나오는 그림)를 누릅니다.', '목록을 아래로 내려 "홈 화면에 추가"를 누릅니다.', '오른쪽 위의 "추가"를 누릅니다.'));
   } else if (SAMSUNG) {
