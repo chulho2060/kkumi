@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xLNO98I4XrLN5GFjjOOUKsy3UsyRzd57XV9rra4LmCQ='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kdXCebBTdMceioeZjM3zsshLmZ9y/oqOJYTBcXsvvRg='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -539,7 +539,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.8.2';
+const APP_VERSION = '1.8.3';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -882,9 +882,12 @@ function renderMaster() {
   $('#v-edit').hidden = !S.master;
 }
 /** 아래 단추 줄의 '사진' / '첫 순간' 을 오갑니다. */
-function setTab(tab) {
+function setTab(tab, fromBack) {
+  const was = S.tab;
   if (S.tab !== tab) { S.tab = tab; renderAll(); }
   window.scrollTo(0, 0);
+  // 달력·첫 순간에 있을 때 휴대폰의 뒤로 가기를 누르면 사진첩을 나가지 않고 '사진'으로 돌아옵니다.
+  if (tab !== 'all') Back.opened(); else if (was !== 'all' && fromBack !== true) Back.closed();
 }
 function renderHero() {
   const st = S.settings, now = today(), box = $('#hero');
@@ -1396,7 +1399,7 @@ function closeFrame(fromBack) {
  */
 const Back = {
   guard: false, skip: 0,
-  layers() { return $('#sheets').childNodes.length + (V.open ? 1 : 0) + (F.open ? 1 : 0); },
+  layers() { return $('#sheets').childNodes.length + (V.open ? 1 : 0) + (F.open ? 1 : 0) + (S.tab !== 'all' ? 1 : 0); },
   opened() {                      // 무언가 열렸을 때
     if (PREVIEW || this.guard) return;
     try { history.pushState({ kkumiGuard: 1 }, ''); this.guard = true; } catch (e) {}
@@ -1416,6 +1419,7 @@ const Back = {
     if (top && top._ctl) { if (top._ctl.busy) toast('지금 하는 일이 끝난 뒤에 닫을 수 있어요.'); else top._ctl.close(true); }
     else if (F.open) closeFrame(true);
     else if (V.open) closeViewer(true);
+    else if (S.tab !== 'all') setTab('all', true);        // 달력·첫 순간 → 사진
     if (this.layers()) this.opened();          // 아직 열린 것이 있으면 다시 지킵니다
   }
 };
@@ -2604,7 +2608,7 @@ function openMonths() {
   const pick = (kind, v) => {
     S.f.month = kind === 'month' ? v : ''; S.f.age = kind === 'age' ? v : '';
     ctl.close();
-    if (S.tab !== 'all') { S.tab = 'all'; renderAll(); } else { renderFilters(); renderList(); }
+    if (S.tab !== 'all') { S.tab = 'all'; renderAll(); Back.closed(); } else { renderFilters(); renderList(); }
     window.scrollTo(0, Math.max(0, $('#filters').getBoundingClientRect().top + window.scrollY - 12));
   };
   const body = h('div', { class: 'stack' });
