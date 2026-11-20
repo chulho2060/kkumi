@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-H8kwi0/SdXmJv6caedu8c2IQCcaqJ9HFyW5tLbbJAd0='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-XATs1MVG6ydnSKJh/9B/RckTpL41uuGuzJAWnjy3MBw='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -233,6 +233,8 @@ textarea.input { min-height: 6rem; resize: vertical; line-height: 1.5; }
 .form-msg:empty { display: none; }
 .copy-row { display: flex; flex-wrap: wrap; gap: .5rem .8rem; align-items: center; justify-content: space-between; padding: .6rem .8rem; border: 1px solid var(--line); border-radius: .9rem; }
 .copy-row span { flex: 1 1 12rem; }
+.btn.choice { display: grid; gap: .15rem; justify-items: start; text-align: left; width: 100%; padding: .8rem 1.1rem; }
+.btn.choice span { font-weight: 500; font-size: .93rem; line-height: 1.45; }
 .row { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 .check { display: flex; gap: .6rem; align-items: center; font-weight: 500; }
 .check input { width: 1.6rem; height: 1.6rem; flex: none; accent-color: var(--accent); }
@@ -513,14 +515,14 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
 const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 const MOMENTS = ['첫 만남', '첫 웃음', '첫 목욕', '첫 뒤집기', '첫 이유식', '백일', '첫니', '첫 걸음마', '첫돌'];
 const FRAME_SECONDS = 8;
-const DEFAULTS = { title: '꾸미 사진첩', name: '꾸미', due: '', born: '', hello: '', lastBackup: 0 };   // 예정일·생일은 서버에서만 받아 옵니다
+const DEFAULTS = { title: '꾸미 사진첩', name: '꾸미', due: '', born: '', hello: '', lastBackup: 0, famOrig: 1 };   // 예정일·생일은 서버에서만 받아 옵니다
 const ART = '<svg viewBox="0 0 120 84" aria-hidden="true"><g fill="none" stroke-width="8" stroke-linecap="round"><path d="M20 64A40 40 0 0 1 100 64" style="stroke:var(--rb1)"/><path d="M28 64A32 32 0 0 1 92 64" style="stroke:var(--rb2)"/><path d="M36 64A24 24 0 0 1 84 64" style="stroke:var(--rb3)"/><path d="M44 64A16 16 0 0 1 76 64" style="stroke:var(--rb4)"/></g><g style="fill:var(--puff)"><circle cx="13" cy="68" r="8"/><circle cx="23" cy="62" r="10"/><circle cx="33" cy="69" r="7.5"/><rect x="5" y="67" width="36" height="11" rx="5.5"/><circle cx="87" cy="69" r="7.5"/><circle cx="97" cy="62" r="10"/><circle cx="107" cy="68" r="8"/><rect x="79" y="67" width="36" height="11" rx="5.5"/></g><g style="fill:var(--surface)"><circle cx="13" cy="66" r="8"/><circle cx="23" cy="60" r="10"/><circle cx="33" cy="67" r="7.5"/><rect x="5" y="65" width="36" height="11" rx="5.5"/><circle cx="87" cy="67" r="7.5"/><circle cx="97" cy="60" r="10"/><circle cx="107" cy="66" r="8"/><rect x="79" y="65" width="36" height="11" rx="5.5"/></g><g style="fill:var(--star)"><path d="M60 5l1.7 4.1 4.1 1.7-4.1 1.7L60 16.6l-1.7-4.1-4.1-1.7 4.1-1.7z"/><path d="M27 20l1.1 2.6 2.6 1.1-2.6 1.1-1.1 2.6-1.1-2.6-2.6-1.1 2.6-1.1z"/><path d="M95 16l1.1 2.6 2.6 1.1-2.6 1.1-1.1 2.6-1.1-2.6-2.6-1.1 2.6-1.1z"/></g></svg>';   // 구름 사이에 걸린 파스텔 무지개
 
 /* ───────── 작은 도구들 ───────── */
@@ -1104,7 +1106,8 @@ async function showSlide() {
   $('#v-cap').textContent = it.c || '';
   $('#v-date').textContent = [it.m && '첫 순간 · ' + it.m, koDate(it.d), age].filter(Boolean).join(' · ');
   $('#v-prev').disabled = V.i === 0; $('#v-next').disabled = V.i === V.list.length - 1;
-  $('#v-save').hidden = PREVIEW || it.k === 'v';
+  $('#v-save').hidden = PREVIEW || (it.k === 'v' && !S.demo && !(S.master || S.settings.famOrig !== 0));
+  $('#v-save').textContent = it.k === 'v' ? '영상 저장' : '사진 저장';
   stage.textContent = ''; stage.classList.remove('zoom');
   $('#viewer').classList.toggle('is-video', it.k === 'v');
   if (it.k === 'v') $('#viewer').classList.remove('bare');       // 영상은 닫기 단추가 늘 보이게
@@ -1131,13 +1134,95 @@ function toggleShow() {
   $('#v-show').textContent = '멈추기'; $('#v-show').setAttribute('aria-pressed', 'true');
   V.timer = setInterval(() => { if (!step(1)) stopShow(); }, 5000);
 }
+/* ───────── 사진·영상 저장: 보기용(용량 작게) / 원본(찍은 그대로) ───────── */
+const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', heic: 'image/heic', heif: 'image/heif', webp: 'image/webp', gif: 'image/gif', mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm' };
+const mimeOf = name => MIME[String(name || '').split('.').pop().toLowerCase()] || 'application/octet-stream';
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = h('a', { href: url, download: name }); document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
 async function saveCurrent() {
   const it = V.list[V.i]; if (!it) return;
-  const url = (await getView(it).catch(() => null)) || (await getThumb(it).catch(() => null));
-  if (!url) return toast('사진을 아직 불러오지 못했어요.');
-  const a = h('a', { href: url, download: `${S.settings.title} ${it.d} ${it.id}.jpg` });
-  document.body.append(a); a.click(); a.remove();
-  toast('사진을 내려받았어요.');
+  const video = it.k === 'v';
+  const viewName = `${S.settings.title} ${it.d} ${it.id}.jpg`, origName = it.n || viewName;
+  let canOrig = S.master || S.settings.famOrig !== 0;
+  const body = h('div', { class: 'stack' }, h('p', { class: 'hint', text: '준비하는 중이에요…' })), msg = h('p', { class: 'form-msg', role: 'alert' });
+  const ctl = openSheet(video ? '영상 저장' : '사진 저장', body, { small: true });
+  const choice = (id, title, sub, onclick, primary) => h('button', { type: 'button', class: 'btn choice' + (primary ? ' primary' : ''), id, onclick }, h('b', { text: title }), h('span', { text: sub }));
+  const kakaoNote = () => (KAKAO ? h('div', { class: 'stack' },
+    h('p', { class: 'hint', text: '카카오톡 안에서 열린 화면에서는 저장이 안 될 수 있어요. 안 되면 아래 단추로 인터넷 앱에서 연 뒤 다시 저장해 주세요.' }),
+    h('div', { class: 'row' }, h('button', { type: 'button', class: 'btn small', id: 'sv-out', onclick: openOutside }, '인터넷 앱으로 열기'))) : null);
+  const done = (blob, name) => {
+    let file = null;
+    try { file = new File([blob], name, { type: blob.type || mimeOf(name) }); } catch (e) {}
+    const share = IOS && file && typeof navigator.share === 'function' && navigator.canShare && navigator.canShare({ files: [file] });
+    ctl.setBusy(false);
+    if (!share) {
+      saveBlob(blob, name); ctl.close();
+      toast((video ? '영상' : '사진') + '을 내려받았어요.' + (matchMedia('(pointer: coarse)').matches ? ' 휴대폰의 "다운로드"나 "내 파일"에서 볼 수 있어요.' : ''));
+      return;
+    }
+    // 아이폰: 한 번 더 눌러 사진 앱에 넣습니다(받는 데 시간이 걸리면 저장 창을 바로 띄울 수 없어서).
+    body.textContent = '';
+    body.append(h('p', { class: 'box ok', text: '다 받았어요. 아래 단추를 누르고 "이미지 저장"(영상은 "비디오 저장")을 고르면 사진 앱에 들어갑니다.' }),
+      h('button', { type: 'button', class: 'btn primary', id: 'sv-share', onclick: () => navigator.share({ files: [file] }).then(() => ctl.close(), () => {}) }, '사진 앱에 저장하기'),
+      h('button', { type: 'button', class: 'btn', id: 'sv-file', onclick: () => { saveBlob(blob, name); ctl.close(); } }, '파일로 저장하기'));
+  };
+  const saveOrig = async () => {
+    msg.textContent = ''; ctl.setBusy(true);
+    const bar = h('div', { class: 'bar' }, h('i'));
+    body.textContent = ''; body.append(h('p', { text: '원본을 받는 중이에요. 잠시만 기다려 주세요.' }), bar);
+    try {
+      const parts = []; let off = 0, size = it.z || 1;
+      while (off < size) {
+        const r = await api('orig', { id: it.o, offset: off, length: CHUNK }, 3);
+        const bytes = b64ToBytes(r.data); size = r.size;
+        if (!bytes.length) break;
+        parts.push(bytes); off += bytes.length;
+        bar.firstChild.style.width = Math.min(100, off / size * 100).toFixed(0) + '%';
+      }
+      done(new Blob(parts, { type: mimeOf(origName) }), origName);
+    } catch (e) {
+      ctl.setBusy(false);
+      if (e.code === 'no_orig' || e.code === 'no_master') { canOrig = false; msg.textContent = '원본은 엄마·아빠만 저장할 수 있어요.' + (video ? '' : ' 보기용으로 저장해 주세요.'); }
+      else msg.textContent = '원본을 받지 못했어요. ' + e.message;
+      draw();
+    }
+  };
+  let viewUrl = null, viewBlob = null;
+  const saveView = () => {
+    if (viewBlob) return done(viewBlob.type ? viewBlob : new Blob([viewBlob], { type: 'image/jpeg' }), viewName);
+    if (!viewUrl) { msg.textContent = '사진을 아직 불러오지 못했어요. 잠시 뒤에 다시 눌러 주세요.'; return; }
+    const a = h('a', { href: viewUrl, download: viewName }); document.body.append(a); a.click(); a.remove();
+    ctl.close(); toast('사진을 내려받았어요.');
+  };
+  const draw = () => {
+    body.textContent = '';
+    if (video && !S.demo) {
+      const href = 'https://drive.google.com/uc?export=download&id=' + encodeURIComponent(it.o);
+      body.append(h('p', { text: `영상은 구글 드라이브에서 원본 그대로 받습니다. (${sizeText(it.z)})` }),
+        h('a', { class: 'btn primary', id: 'sv-video', href, target: '_blank', rel: 'noopener', onclick: () => setTimeout(() => ctl.close(), 400) }, '원본 영상 받기'),
+        h('p', { class: 'hint', text: '새 창이 열리면 "다운로드"를 눌러 주세요. 용량이 큰 영상은 "바이러스 검사를 할 수 없습니다"라고 물어볼 수 있는데, "무시하고 다운로드"를 누르면 됩니다. 용량이 크니 와이파이에서 받는 것이 좋아요.' }),
+        ...[msg, kakaoNote()].filter(Boolean));
+      return;
+    }
+    body.append(...[
+      video ? null : choice('sv-view', '보기용으로 저장', `용량 작게${viewBlob ? ' · ' + sizeText(viewBlob.size) : ''} · 휴대폰으로 보거나 보내기에 좋아요`, saveView, true),
+      canOrig ? choice('sv-orig', '원본으로 저장', `찍은 그대로 · ${sizeText(it.z)}` + (video ? '' : ' · 인화하거나 크게 볼 때 좋아요'), saveOrig, video) : null,
+      msg, kakaoNote()].filter(Boolean));
+  };
+  if (!video) {
+    viewUrl = (await getView(it).catch(() => null)) || (await getThumb(it).catch(() => null));
+    viewBlob = (await DB.get('img', 'v:' + it.id)) || null;
+  }
+  draw();
+}
+/** 카카오톡 안에서 열린 화면을 휴대폰의 인터넷 앱(크롬, 삼성 인터넷, 사파리)으로 다시 엽니다. */
+function openOutside() {
+  const link = S.cfg && S.cfg.s ? linkFor(location.href.split('#')[0]) : location.href;
+  location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(link);
+  if (ANDROID) setTimeout(() => { if (document.visibilityState === 'visible') location.href = 'intent://' + link.replace(/^https?:\/\//, '') + '#Intent;scheme=https;end'; }, 1500);
 }
 
 /* ───────── 액자처럼 틀어 두기 ─────────
@@ -1687,6 +1772,7 @@ async function openSettings() {
   const due = h('input', { class: 'input', id: 'st-due', type: 'date', value: st.due || '' });
   const born = h('input', { class: 'input', id: 'st-born', type: 'date', value: st.born || '' });
   const hello = h('textarea', { class: 'input', id: 'st-hello', maxlength: '200' }); hello.value = st.hello || '';
+  const famOrig = h('input', { type: 'checkbox', id: 'st-famorig', checked: st.famOrig !== 0 });
   // 아기 이름을 바꾸면 사진첩 이름·인사말 속의 예전 이름도 함께 바꿔 보여 줍니다(직접 고친 칸은 건드리지 않습니다).
   let titleMine = false, helloMine = false;
   title.addEventListener('input', () => { titleMine = true; });
@@ -1701,7 +1787,7 @@ async function openSettings() {
     onsubmit: async e => {
       e.preventDefault(); msg.textContent = ''; msg.className = 'form-msg';
       try {
-        const r = await api('settings', { settings: { title: title.value.trim(), name: name.value.trim(), due: due.value, born: born.value, hello: hello.value.trim() } }, 1);
+        const r = await api('settings', { settings: { title: title.value.trim(), name: name.value.trim(), due: due.value, born: born.value, hello: hello.value.trim(), famOrig: famOrig.checked } }, 1);
         S.settings = { ...DEFAULTS, ...r.settings }; renderAll(true);
         st = S.settings; titleMine = helloMine = false;
         msg.className = 'form-msg ok'; msg.textContent = '저장했어요.';
@@ -1714,6 +1800,8 @@ async function openSettings() {
     field('st-due', '출산 예정일', due),
     field('st-born', '태어난 날', born, '태어나면 적어 주세요. "태어난 지 며칠", "백일까지 며칠"이 자동으로 나옵니다.'),
     field('st-hello', '가족에게 건네는 인사말 (안 써도 돼요)', hello),
+    h('div', { class: 'field' }, h('label', { class: 'check' }, famOrig, '가족도 사진을 원본으로 저장할 수 있게 하기'),
+      h('p', { class: 'hint', text: '끄면 가족은 보기용(용량 작게)으로만 저장할 수 있어요. 원본에는 찍은 곳 같은 정보가 함께 들어 있을 수 있습니다. 서버 1.4부터 적용됩니다.' })),
     msg, h('button', { type: 'submit', class: 'btn primary' }, '저장'));
 
   const linkArea = h('textarea', { class: 'link-box', id: 'st-link', readonly: true, 'aria-label': '가족 링크' }); linkArea.value = S.demo ? '(예시 화면에는 가족 링크가 없습니다)' : familyLink();
@@ -2569,15 +2657,9 @@ function openHomeGuide() {
         catch (e) { msg.textContent = '꺼내 두지 못했어요. 화면 오른쪽 위의 점 세 개(⋮)를 누르고 "홈 화면에 추가"를 눌러 주세요.'; }
       } }, '홈 화면에 꺼내 두기'), msg);
   } else if (KAKAO) {
-    const link = S.cfg && S.cfg.s ? linkFor(location.href.split('#')[0]) : location.href;
-    const out = () => {
-      // 카카오톡 안의 화면에서는 꺼내 둘 수 없어서, 휴대폰의 인터넷 앱으로 같은 사진첩을 엽니다.
-      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(link);
-      if (ANDROID) setTimeout(() => { if (document.visibilityState === 'visible') location.href = 'intent://' + link.replace(/^https?:\/\//, '') + '#Intent;scheme=https;end'; }, 1500);
-    };
     body.append(h('p', { text: '카카오톡 안에서 열린 화면에서는 꺼내 둘 수 없어요. 휴대폰의 인터넷 앱(크롬, 삼성 인터넷, 사파리)으로 열어야 합니다.' }),
       steps('아래 단추를 눌러 인터넷 앱으로 엽니다.', '새로 열린 화면에서 아래 단추 줄의 "설정"을 누르고 "꺼내 두는 법 보기"를 다시 누릅니다.'),
-      h('button', { type: 'button', class: 'btn primary', id: 'home-out', onclick: out }, '인터넷 앱으로 열기'),
+      h('button', { type: 'button', class: 'btn primary', id: 'home-out', onclick: openOutside }, '인터넷 앱으로 열기'),
       h('p', { class: 'hint', text: '단추를 눌러도 그대로라면, 화면 아래(또는 위)의 점 세 개나 공유 그림을 누르고 "다른 브라우저로 열기"를 눌러 주세요.' }));
   } else if (IOS) {
     body.append(steps('화면 아래 가운데의 공유 단추(네모에서 화살표가 위로 나오는 그림)를 누릅니다.', '목록을 아래로 내려 "홈 화면에 추가"를 누릅니다.', '오른쪽 위의 "추가"를 누릅니다.'));
