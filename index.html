@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="no-referrer">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-JqV6ETb3bhpRowBFZTxr0eLkahjg69Sm3yY4bVhqZOc='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kdXCebBTdMceioeZjM3zsshLmZ9y/oqOJYTBcXsvvRg='; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src https://script.google.com https://*.googleusercontent.com; frame-src https://*.google.com https://*.googleusercontent.com; worker-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="apple-mobile-web-app-title" content="꾸미 사진첩">
 <meta name="theme-color" content="#FFFFFF">
 <meta property="og:type" content="website">
@@ -176,6 +176,21 @@ main.wrap { padding-bottom: calc(var(--dock) + 5.5rem + env(safe-area-inset-bott
   #album:not(.compact) .badges { left: 16px; top: .6rem; }
 }
 .more { margin: 1.6rem 0 1rem; display: grid; }
+.day-more { width: 100%; margin-top: .7rem; }
+.day-pick { margin-left: auto; }
+.tile.picked .pic { outline: 4px solid var(--accent); outline-offset: -4px; }
+.tile .pickmark { position: absolute; right: .5rem; top: .5rem; width: 2rem; height: 2rem; border-radius: 50%; border: 2px solid #fff; background: rgba(63, 51, 64, .35); color: #fff; display: grid; place-items: center; font-weight: 700; }
+.tile.picked .pickmark { background: var(--accent); }
+.pickbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 27; background: var(--surface); border-top: 1px solid var(--line-strong);
+  display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: space-between;
+  padding: .5rem max(12px, env(safe-area-inset-right, 0px)) calc(.5rem + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+}
+.pickbar b { flex: 1 1 5rem; }
+.pickbar .row { flex: none; gap: .4rem; }
+.picking .dock, .picking .fab { display: none; }
+@media (min-width: 44rem) { .pickbar { left: 50%; right: auto; bottom: 1rem; transform: translateX(-50%); width: 34rem; border: 1px solid var(--line-strong); border-radius: 1.3rem; box-shadow: 0 6px 22px var(--shadow); } }
+.im-row { display: grid; gap: .4rem; padding: .7rem .8rem; border: 1px solid var(--line); border-radius: .9rem; }
 .state { margin-top: 1.4rem; padding: 1.8rem 1.2rem; text-align: center; background: var(--surface); border: 1px dashed var(--line); border-radius: 1.2rem; display: grid; gap: 1rem; justify-items: center; }
 .state p { max-width: 30rem; }
 .foot { margin-top: 2.4rem; padding-block: 1.2rem 0; border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .92rem; }
@@ -454,6 +469,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
       <button type="button" class="pill" id="f-star">대표 사진</button>
       <button type="button" class="pill" id="f-month">달 고르기</button>
       <button type="button" class="pill" id="f-recap" hidden>모아 보기 ▶</button>
+      <button type="button" class="pill" id="f-pick" hidden>여러 개 고르기</button>
     </div>
     <div id="days"></div>
     <div class="more" id="more-wrap" hidden><button type="button" class="btn" id="more">지난 사진 더 보기</button></div>
@@ -469,6 +485,14 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 <button type="button" class="to-top" id="to-top" hidden>↑ 맨 위로</button>
 <button type="button" class="fab" id="m-upload" hidden>＋ 사진 올리기</button>
 
+<div class="pickbar" id="pickbar" hidden role="group" aria-label="고른 사진">
+  <b id="pick-count">0개 고름</b>
+  <div class="row">
+    <button type="button" class="btn small" id="pick-edit">고치기</button>
+    <button type="button" class="btn small danger" id="pick-del">지우기</button>
+    <button type="button" class="btn small quiet" id="pick-done">끝내기</button>
+  </div>
+</div>
 <nav class="dock" id="dock" hidden aria-label="주요 메뉴">
   <button type="button" id="tab-all" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="8.8" cy="10" r="1.6"/><path d="M4 17l5-4.5 3.5 3 3-2.5 4.5 4"/></svg>사진</button>
   <button type="button" id="tab-cal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 9.8h17M8 3v4M16 3v4M8 14h2M14 14h2"/></svg>달력</button>
@@ -485,7 +509,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
     <button type="button" class="btn primary" id="v-prev">‹ 이전 사진</button>
     <button type="button" class="btn primary" id="v-next">다음 사진 ›</button>
     <div class="extra">
-      <button type="button" class="btn quiet small" id="v-show">이어서 보기</button>
+      <button type="button" class="btn quiet small" id="v-show">자동 넘김</button>
       <button type="button" class="btn quiet small" id="v-save">사진 저장</button>
       <button type="button" class="btn quiet small" id="v-edit" hidden>고치기</button>
     </div>
@@ -515,7 +539,7 @@ input[type="range"] { width: 100%; height: 2.4rem; accent-color: var(--accent); 
 const FIXED_SERVER = '';
 
 const PREVIEW = window.__PREVIEW__ === true;
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.8.3';
 const SIMPLE_MAX = 10 * 1024 * 1024;      // 이보다 큰 파일은 여러 조각으로 나눠 올림
 let CHUNK = 8 * 1024 * 1024;
 const DAY = 86400000;
@@ -614,6 +638,9 @@ const S = {
   settings: { ...DEFAULTS }, items: [], packs: [],
   tab: 'all', cal: '',                          // 'all' 사진 · 'cal' 달력 · 'moments' 첫 순간
   f: { star: false, month: '', age: '', compact: !!store.get('compact', false), oldest: !!store.get('oldest', false) },
+  index: null,                                  // 서버가 준 목록 그대로
+  openDays: new Set(),                          // "이날 … 더 보기"로 펼쳐 둔 날
+  pick: null,                                   // 여러 개 고르기: 고른 사진 번호들(고르는 중이 아니면 null)
   list: [], shown: 0, seenBefore: store.get('seen', null)
 };
 
@@ -686,6 +713,25 @@ function deviceId() {
     store.set('dev', d);
   }
   return d;
+}
+/**
+ * 목록 받기. 전에 받은 목록이 있으면 "몇 번까지 받았다"고 알려서 그 뒤에 바뀐 것만 받아 합칩니다.
+ * 혹시 어긋나도 스스로 바로잡히도록, 일주일에 한 번은 전체를 다시 받습니다.
+ */
+async function fetchIndex(tries) {
+  const have = S.index;
+  const since = have && typeof have.rev === 'number' && Array.isArray(have.items) && Date.now() - (Number(store.get('fullAt', 0)) || 0) < 7 * DAY;
+  const r = await api('list', since ? { since: have.rev } : {}, tries);
+  if (r.same) return { r, idx: have, changed: false };
+  if (r.delta && have) {
+    const d = r.delta, m = new Map(have.items.map(x => [x.id, x]));
+    for (const id of d.gone || []) m.delete(String(id));
+    for (const it of d.items || []) m.set(it.id, it);
+    const items = [...m.values()].sort((a, b) => Number(a.id) - Number(b.id));
+    return { r, idx: { ...have, rev: d.rev, seq: d.seq, packs: d.packs || [], settings: d.settings || {}, items }, changed: true };
+  }
+  store.set('fullAt', Date.now());
+  return { r, idx: r.index, changed: true };
 }
 function dropMaster(expired) {
   const was = S.master;
@@ -819,11 +865,13 @@ function ageText(date) {
 
 /* ───────── 화면 그리기 ───────── */
 function applyIndex(idx) {
+  S.index = idx || null;                       // 서버가 준 목록 그대로(다음에 '바뀐 것만' 받을 때 여기에 합칩니다)
   S.items = (idx && idx.items) || [];
   S.packs = (idx && idx.packs) || [];
   S.settings = { ...DEFAULTS, ...((idx && idx.settings) || {}) };
 }
 function renderAll(keep) {
+  S.drawnAs = S.master;                         // 엄마·아빠 화면으로 그렸는지 가족 화면으로 그렸는지
   document.title = S.settings.title;
   $('#title').textContent = S.settings.title;
   const homeName = $('meta[name="apple-mobile-web-app-title"]'); if (homeName) homeName.setAttribute('content', S.settings.title);
@@ -834,9 +882,12 @@ function renderMaster() {
   $('#v-edit').hidden = !S.master;
 }
 /** 아래 단추 줄의 '사진' / '첫 순간' 을 오갑니다. */
-function setTab(tab) {
+function setTab(tab, fromBack) {
+  const was = S.tab;
   if (S.tab !== tab) { S.tab = tab; renderAll(); }
   window.scrollTo(0, 0);
+  // 달력·첫 순간에 있을 때 휴대폰의 뒤로 가기를 누르면 사진첩을 나가지 않고 '사진'으로 돌아옵니다.
+  if (tab !== 'all') Back.opened(); else if (was !== 'all' && fromBack !== true) Back.closed();
 }
 function renderHero() {
   const st = S.settings, now = today(), box = $('#hero');
@@ -890,6 +941,7 @@ function renderFilters() {
   $('#f-month').textContent = (S.f.month ? monthName(S.f.month) : S.f.age ? ageKeyName(S.f.age) : '달 고르기') + ' ▾';
   $('#f-month').setAttribute('aria-pressed', String(!!(S.f.month || S.f.age)));
   $('#f-recap').hidden = !(S.f.month || S.f.age);
+  $('#f-pick').hidden = !S.master; $('#f-pick').setAttribute('aria-pressed', String(!!S.pick));
   for (const [id, on] of [['#tab-all', S.tab === 'all'], ['#tab-cal', S.tab === 'cal'], ['#tab-moments', mom]]) { if (on) $(id).setAttribute('aria-current', 'page'); else $(id).removeAttribute('aria-current'); }
 }
 const byDate = (x, y) => (x.d < y.d ? -1 : x.d > y.d ? 1 : (x.t || '') < (y.t || '') ? -1 : (x.t || '') > (y.t || '') ? 1 : Number(x.id) - Number(y.id));
@@ -922,10 +974,13 @@ const tiles = new Map();
 const io = new IntersectionObserver(entries => {
   for (const en of entries) { if (en.isIntersecting) fillTile(en.target); else restTile(en.target); }
 }, { rootMargin: '700px 0px' });
-const moreIO = new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) renderMore(); }, { rootMargin: '900px 0px' });
+const pageSize = () => (S.f.compact ? 12 : 5);           // 한 번에 보여 주는 개수("더 보기"를 누를 때마다 이만큼씩, 날짜 단위로 끊음)
+const dayLimit = () => (S.f.compact ? 6 : 3);            // 하루에 먼저 보여 주는 개수(나머지는 "이날 … 더 보기")
 
 function renderList(keep) {
-  const want = keep ? Math.max(48, S.shown) : 48, y = window.scrollY, mom = S.tab === 'moments';
+  const want = keep ? S.shown : 0, y = window.scrollY, mom = S.tab === 'moments';
+  if (S.pick && (S.tab !== 'all' || !S.master)) S.pick = null;
+  document.body.classList.toggle('picking', !!S.pick); $('#pickbar').hidden = !S.pick; if (S.pick) drawPickBar();
   S.list = S.tab === 'cal' ? [] : visibleItems();
   for (const fig of tiles.values()) restTile(fig);
   io.disconnect(); focusIO.disconnect(); tiles.clear();
@@ -949,20 +1004,33 @@ function renderList(keep) {
   if (keep) window.scrollTo(0, y);
   trackScroll();
 }
-function renderMore(target = 48) {
-  const days = $('#days'), mom = S.tab === 'moments'; let added = 0;
-  while (S.shown < S.list.length && added < target) {
+/** until: 적어도 이만큼(사진 개수)까지는 다시 그립니다(화면을 새로 그릴 때 보던 곳을 지키려고). */
+function renderMore(until = 0) {
+  const days = $('#days'), mom = S.tab === 'moments', limit = dayLimit(), page = mom ? 30 : pageSize(); let added = 0;
+  while (S.shown < S.list.length && (added < page || S.shown < until)) {
     const date = S.list[S.shown].d; let j = S.shown;
     if (mom) j++; else while (j < S.list.length && S.list[j].d === date) j++;
     const group = S.list.slice(S.shown, j), age = ageText(date);
+    const allPicked = S.pick && group.every(x => S.pick.has(x.id));
     const head = mom
       ? h('div', { class: 'day-head' }, h('h2', { text: group[0].m }), h('span', { class: 'age', text: koShort(date) + (age ? ' · ' + age : '') }))
-      : h('div', { class: 'day-head' }, h('h2', { text: koDate(date) }), age ? h('span', { class: 'age', text: age }) : null);
-    const sec = h('section', { class: 'day', 'data-m': date.slice(0, 7) }, head, h('div', { class: 'grid' }, group.map(makeTile)));
+      : h('div', { class: 'day-head' }, h('h2', { text: koDate(date) }), age ? h('span', { class: 'age', text: age }) : null,
+        S.pick ? h('button', { type: 'button', class: 'btn small quiet day-pick', onclick: () => { for (const x of group) { if (allPicked) S.pick.delete(x.id); else S.pick.add(x.id); } renderList(true); } }, allPicked ? '이날 고르기 풀기' : `이날 ${group.length}개 모두 고르기`) : null);
+    const open = mom || group.length <= limit || S.openDays.has(date);
+    const grid = h('div', { class: 'grid' }, (open ? group : group.slice(0, limit)).map(makeTile));
+    const sec = h('section', { class: 'day', 'data-m': date.slice(0, 7) }, head, grid);
+    if (!open) {
+      const rest = group.slice(limit), nv = rest.filter(x => x.k === 'v').length, np = rest.length - nv;
+      const more = h('button', { type: 'button', class: 'btn day-more', onclick: () => { S.openDays.add(date); grid.append(...rest.map(makeTile)); more.remove(); } },
+        `이날 ${[np ? `사진 ${np}장` : '', nv ? `영상 ${nv}개` : ''].filter(Boolean).join(' · ')} 더 보기`);
+      sec.append(more);
+    }
     days.append(sec);
-    added += j - S.shown; S.shown = j;
+    S.shown = j; added += open ? group.length : limit;
   }
-  $('#more-wrap').hidden = S.shown >= S.list.length;
+  const left = S.list.length - S.shown;
+  $('#more-wrap').hidden = left <= 0;
+  $('#more').textContent = `${S.f.oldest && !mom ? '다음' : '지난'} 사진 더 보기 (${left}개 남음)`;
 }
 function makeTile(it) {
   const label = (it.k === 'v' ? '영상' : '사진') + ' 크게 보기: ' + (it.c || koDate(it.d));
@@ -974,10 +1042,12 @@ function makeTile(it) {
     it.s ? h('span', { class: 'badge star', text: '대표' }) : null,
     it.m && S.tab !== 'moments' ? h('span', { class: 'badge moment', text: it.m }) : null,
     it.k === 'v' ? h('span', { class: 'badge video', text: '영상 ▶' }) : null);
-  const pic = h('button', { type: 'button', class: 'pic', 'aria-label': label, style: `--ar:${ar.toFixed(3)}`, onclick: () => openViewer(it.id) }, ph, img, badges);
-  const fig = h('figure', { class: 'tile' }, pic,
+  const picked = !!(S.pick && S.pick.has(it.id));
+  const pic = h('button', { type: 'button', class: 'pic', 'aria-label': S.pick ? '고르기: ' + (it.c || koDate(it.d)) : label, 'aria-pressed': S.pick ? String(picked) : null, style: `--ar:${ar.toFixed(3)}`,
+    onclick: () => (S.pick ? togglePick(it) : openViewer(it.id)) }, ph, img, badges, S.pick ? h('span', { class: 'pickmark', 'aria-hidden': 'true', text: picked ? '✓' : '' }) : null);
+  const fig = h('figure', { class: 'tile' + (picked ? ' picked' : '') }, pic,
     it.c ? h('figcaption', { text: it.c }) : null,
-    S.master ? h('button', { type: 'button', class: 'btn small quiet', onclick: () => openEdit(it) }, '고치기') : null);
+    S.master && !S.pick ? h('button', { type: 'button', class: 'btn small quiet', onclick: () => openEdit(it) }, '고치기') : null);
   fig._it = it; fig._img = img; fig._ph = ph; fig._pic = pic;
   tiles.set(it.id, fig); io.observe(fig); focusIO.observe(fig);
   return fig;
@@ -1025,7 +1095,7 @@ function openViewer(id, list) {
   V.open = true; V.back = document.activeElement;
   $('#viewer').hidden = false; $('#viewer').classList.toggle('bare', LAND.matches);
   document.body.classList.add('noscroll');
-  if (!PREVIEW) { try { history.pushState({ kkumiViewer: 1 }, ''); } catch (e) {} }
+  Back.opened();
   showSlide(); $('#v-close').focus(); trackScroll();
 }
 function closeViewer(fromBack) {
@@ -1034,7 +1104,7 @@ function closeViewer(fromBack) {
   $('#viewer').hidden = true; $('#viewer').classList.remove('bare');
   $('#v-stage').textContent = ''; $('#v-stage').classList.remove('zoom');
   if (!$('#sheets').childNodes.length) document.body.classList.remove('noscroll');
-  if (!fromBack && !PREVIEW) { try { if (history.state && history.state.kkumiViewer) history.back(); } catch (e) {} }
+  if (!fromBack) Back.closed();
   if (V.back && V.back.focus) V.back.focus();
   trackScroll();
 }
@@ -1129,11 +1199,19 @@ function step(n) {
   if (next < 0 || next >= V.list.length) return false;
   V.i = next; showSlide(); return true;
 }
-function stopShow() { clearInterval(V.timer); V.timer = 0; $('#v-show').textContent = '이어서 보기'; $('#v-show').setAttribute('aria-pressed', 'false'); }
+function stopShow() { clearInterval(V.timer); V.timer = 0; $('#v-show').textContent = '자동 넘김'; $('#v-show').setAttribute('aria-pressed', 'false'); }
+/** 자동 넘김: 5초마다 다음 사진으로 넘깁니다. 영상은 저절로 틀 수 없어서 건너뜁니다. */
+function nextPhoto() { for (let i = V.i + 1; i < V.list.length; i++) if (V.list[i].k !== 'v') return i; return -1; }
 function toggleShow() {
   if (V.timer) return stopShow();
-  $('#v-show').textContent = '멈추기'; $('#v-show').setAttribute('aria-pressed', 'true');
-  V.timer = setInterval(() => { if (!step(1)) stopShow(); }, 5000);
+  if (nextPhoto() < 0) return toast('이 뒤로는 넘겨 볼 사진이 없어요. 영상은 직접 눌러서 봐 주세요.');
+  $('#v-show').textContent = '넘김 멈추기'; $('#v-show').setAttribute('aria-pressed', 'true');
+  toast('5초마다 다음 사진으로 넘어가요. 영상은 건너뜁니다.');
+  V.timer = setInterval(() => {
+    const n = nextPhoto();
+    if (n < 0) { stopShow(); toast('마지막 사진까지 다 봤어요.'); return; }
+    V.i = n; showSlide();
+  }, 5000);
 }
 /* ───────── 사진·영상 저장: 보기용(용량 작게) / 원본(찍은 그대로) ───────── */
 const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', heic: 'image/heic', heif: 'image/heif', webp: 'image/webp', gif: 'image/gif', mp4: 'video/mp4', mov: 'video/quicktime', m4v: 'video/x-m4v', webm: 'video/webm' };
@@ -1256,7 +1334,7 @@ async function frameLock() {
 }
 async function frameSync() {
   F.lastSync = Date.now();
-  if (!S.demo) { try { const r = await api('list', {}, 1); applyIndex(r.index); DB.set('kv', 'index', r.index); packWait.clear(); } catch (e) {} }
+  if (!S.demo) { try { const got = await fetchIndex(1); if (got.changed) { applyIndex(got.idx); DB.set('kv', 'index', got.idx); packWait.clear(); } } catch (e) {} }
   const added = F.custom ? [] : framePhotos().filter(x => !F.known.has(x.id)).sort((x, y) => y.u - x.u);
   for (const it of added) F.known.add(it.id);
   const alive = new Set(S.items.map(x => x.id));
@@ -1297,7 +1375,7 @@ function openFrame(list, title) {
   $('#f-title').hidden = !F.custom; $('#f-title').textContent = F.custom ? F.custom.title : '';
   $('#frame').hidden = false; document.body.classList.add('noscroll');
   setFill(store.get('fill', false));
-  if (!PREVIEW) { try { history.pushState({ kkumiFrame: 1 }, ''); } catch (e) {} }
+  Back.opened();
   try { const el = document.documentElement; if (el.requestFullscreen) el.requestFullscreen().catch(() => {}); } catch (e) {}
   frameLock(); frameNext(); $('#f-close').focus(); trackScroll();
   $('#f-hint').hidden = !!F.custom; clearTimeout(F.hint); F.hint = setTimeout(() => { $('#f-hint').hidden = true; }, 6000);
@@ -1309,12 +1387,42 @@ function closeFrame(fromBack) {
   document.body.classList.remove('noscroll');
   try { if (F.lock) F.lock.release(); } catch (e) {} F.lock = null;
   try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
-  if (!fromBack && !PREVIEW) { try { if (history.state && history.state.kkumiFrame) history.back(); } catch (e) {} }
+  if (!fromBack) Back.closed();
   renderAll(true);
   if (F.back && F.back.focus && document.contains(F.back)) F.back.focus();
 }
 
 /* ───────── 창(대화 상자) ───────── */
+/* ───────── 휴대폰의 '뒤로 가기' ─────────
+ * 창(설정 등)·크게 보기·액자가 열려 있을 때 뒤로 가기를 누르면, 사진첩을 나가지 않고 맨 위에 열린 것 하나만 닫습니다("닫기"와 같음).
+ * 방법: 무엇이든 열려 있는 동안 방문 기록에 '지킴이' 한 칸을 넣어 둡니다. 뒤로 가기는 그 칸만 빼 가고, 그때 맨 위의 것을 닫습니다.
+ */
+const Back = {
+  guard: false, skip: 0,
+  layers() { return $('#sheets').childNodes.length + (V.open ? 1 : 0) + (F.open ? 1 : 0) + (S.tab !== 'all' ? 1 : 0); },
+  opened() {                      // 무언가 열렸을 때
+    if (PREVIEW || this.guard) return;
+    try { history.pushState({ kkumiGuard: 1 }, ''); this.guard = true; } catch (e) {}
+  },
+  closed() {                      // 화면의 "닫기"로 닫았을 때: 열린 것이 하나도 없으면 지킴이 칸을 뺍니다
+    if (PREVIEW) return;
+    setTimeout(() => {            // 닫자마자 다른 창을 여는 경우(설정 → 사진첩 관리)를 위해 한 박자 늦춥니다
+      if (!this.guard || this.layers() || this.leaving) return;     // 화면을 떠나는 중(새로 고침 등)이면 건드리지 않습니다
+      this.guard = false;
+      try { if (history.state && history.state.kkumiGuard) { this.skip++; history.back(); } } catch (e) {}
+    }, 0);
+  },
+  pressed() {                     // 뒤로 가기를 눌렀을 때
+    if (this.skip > 0) { this.skip--; return; }
+    this.guard = false;
+    const top = $('#sheets').lastElementChild;
+    if (top && top._ctl) { if (top._ctl.busy) toast('지금 하는 일이 끝난 뒤에 닫을 수 있어요.'); else top._ctl.close(true); }
+    else if (F.open) closeFrame(true);
+    else if (V.open) closeViewer(true);
+    else if (S.tab !== 'all') setTab('all', true);        // 달력·첫 순간 → 사진
+    if (this.layers()) this.opened();          // 아직 열린 것이 있으면 다시 지킵니다
+  }
+};
 function openSheet(title, content, opts = {}) {
   const prev = document.activeElement;
   const closeBtn = h('button', { type: 'button', class: 'btn quiet small', onclick: () => ctl.close() }, '닫기');
@@ -1325,18 +1433,21 @@ function openSheet(title, content, opts = {}) {
   const wrap = h('div', { class: 'sheet-wrap' + (opts.small ? ' small' : '') }, panel);
   const ctl = {
     busy: false, panel, foot,
-    close() {
+    close(fromBack) {
       if (ctl.busy) return;
       wrap.remove();
       if (!$('#sheets').childNodes.length && !V.open && !F.open) document.body.classList.remove('noscroll');
       if (opts.onclose) opts.onclose();
       if (prev && prev.focus && document.contains(prev)) prev.focus();
+      if (fromBack !== true) Back.closed();
     },
     setBusy(b) { ctl.busy = b; closeBtn.disabled = b; }
   };
   wrap.addEventListener('mousedown', e => { if (e.target === wrap) ctl.close(); });
   wrap.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); ctl.close(); } });
+  wrap._ctl = ctl;
   $('#sheets').append(wrap); document.body.classList.add('noscroll');
+  Back.opened();
   // 휴대폰에서는 자판이 불쑥 올라오지 않도록, 꼭 필요한 창(암호 넣기)에서만 입력 칸에 바로 들어갑니다.
   const typing = opts.type || !matchMedia('(pointer: coarse)').matches;
   const first = (typing && panel.querySelector('.sheet-body input:not([hidden]):not([type="range"]):not([type="checkbox"]), .sheet-body textarea')) || closeBtn;
@@ -1469,9 +1580,19 @@ async function uploadOne(en, onPart) {
   else {
     const start = await api('uploadStart', { name: file.name, mime: base.mime, size: file.size, date: en.date }, 2);
     if (start.chunk) CHUNK = start.chunk;
-    for (let off = 0; off < file.size; off += CHUNK) {
-      await api('uploadChunk', { uploadId: start.uploadId, offset: off, data: await blobToB64(file.slice(off, off + CHUNK)) }, 1);
-      onPart(Math.min(0.95, (off + CHUNK) / file.size));
+    // 조각 하나가 끊겨도 처음부터 다시 하지 않고, 서버에 "어디까지 받았는지" 물어 그 자리부터 이어 올립니다.
+    let off = 0, fails = 0;
+    while (off < file.size) {
+      try {
+        const q = await api('uploadChunk', { uploadId: start.uploadId, offset: off, data: await blobToB64(file.slice(off, off + CHUNK)) }, 1);
+        if (q.done) break;
+        off = typeof q.next === 'number' ? q.next : off + CHUNK; fails = 0;
+      } catch (e) {
+        if (e.code === 'upload_lost' || e.code === 'no_master' || ++fails > 6) throw e;
+        await sleep(Math.min(15000, 1500 * fails));
+        try { const q = await api('uploadChunk', { uploadId: start.uploadId, probe: true }, 2); if (q.done) break; if (typeof q.next === 'number') off = q.next; } catch (e2) {}
+      }
+      onPart(Math.min(0.95, off / file.size));
     }
     r = await api('upload', { ...base, uploadId: start.uploadId }, 1);
   }
@@ -1524,6 +1645,8 @@ function openUpload() {
   });
   go.addEventListener('click', async () => {
     running = true; ctl.setBusy(true); choose.disabled = true; cap.disabled = true; bar.hidden = false; msg.textContent = '';
+    let awake = null;       // 올리는 동안 화면이 꺼지면 휴대폰이 전송을 멈추기도 해서, 화면을 켜 둡니다
+    try { if (navigator.wakeLock) awake = await navigator.wakeLock.request('screen'); } catch (e) {}
     draw();
     const todo = entries.filter(e => !e.dup); let ok = 0, okPhotos = 0, bad = 0, missing = 0;
     for (let i = 0; i < todo.length; i++) {
@@ -1536,6 +1659,7 @@ function openUpload() {
       part(1);
     }
     running = false; done = true; ctl.setBusy(false);
+    try { if (awake) awake.release(); } catch (e) {}
     msg.className = 'form-msg' + (bad ? '' : ' ok');
     msg.textContent = `${ok}개를 올렸어요.` + (bad ? ` ${bad}개는 올리지 못했어요.` : '');
     go.hidden = true; choose.hidden = true;
@@ -1871,6 +1995,137 @@ async function openSettings() {
     if (r.folderUrl) { folder.href = r.folderUrl; folder.hidden = false; }
   } catch (e) { spaceBox.textContent = '저장 공간을 확인하지 못했어요. ' + e.message; }
 }
+/* ───────── 여러 개 한꺼번에 고치기 · 지우기 (엄마·아빠만) ───────── */
+function pickMode(on) {
+  S.pick = on && S.master ? new Set() : null;
+  renderFilters(); renderList(true); renderMaster();
+}
+function drawPickBar() {
+  const n = S.pick ? S.pick.size : 0;
+  $('#pick-count').textContent = n ? `${n}개 고름` : '사진을 눌러 고르세요';
+  $('#pick-edit').disabled = !n; $('#pick-del').disabled = !n;
+}
+function togglePick(it) {
+  if (!S.pick) return;
+  const on = !S.pick.has(it.id); if (on) S.pick.add(it.id); else S.pick.delete(it.id);
+  const fig = tiles.get(it.id);
+  if (fig) { fig.classList.toggle('picked', on); fig._pic.setAttribute('aria-pressed', String(on)); const mark = fig._pic.querySelector('.pickmark'); if (mark) mark.textContent = on ? '✓' : ''; }
+  drawPickBar();
+}
+/** 고른 것들에 같은 일을 20개씩 나눠서 시킵니다. 예전 서버(1.4 이하)에서는 하나씩 처리합니다. */
+async function runMany(action, ids, extra, step) {
+  let done = 0;
+  for (let i = 0; i < ids.length; i += 20) {
+    const part = ids.slice(i, i + 20);
+    try { done += (await api(action, { ids: part, ...extra }, 1)).done; }
+    catch (e) {
+      if (e.code !== 'bad_request' || !/알 수 없는/.test(e.message)) throw e;
+      for (const id of part) { await api(action === 'editMany' ? 'edit' : 'delete', { id, ...extra }, 1); done++; step(i + part.indexOf(id) + 1, ids.length); }
+    }
+    step(Math.min(ids.length, i + 20), ids.length);
+  }
+  return done;
+}
+function pickEdit() {
+  const ids = S.pick ? [...S.pick] : []; if (!ids.length) return;
+  const useCap = h('input', { type: 'checkbox', id: 'pk-usecap' }), cap = h('textarea', { class: 'input', id: 'pk-cap', maxlength: '500' });
+  const useDate = h('input', { type: 'checkbox', id: 'pk-usedate' }), date = h('input', { class: 'input', id: 'pk-date', type: 'date', max: '2100-12-31' });
+  const first = S.items.find(x => x.id === ids[0]); if (first) { cap.value = first.c || ''; date.value = first.d; }
+  cap.addEventListener('input', () => { useCap.checked = true; }); date.addEventListener('change', () => { useDate.checked = true; });
+  const msg = h('p', { class: 'form-msg', role: 'alert' }), bar = h('div', { class: 'bar', hidden: true }, h('i'));
+  const go = h('button', { type: 'submit', class: 'btn primary', id: 'pk-go' }, `${ids.length}개에 적용`);
+  const form = h('form', {
+    onsubmit: async e => {
+      e.preventDefault(); msg.className = 'form-msg'; msg.textContent = '';
+      const change = {};
+      if (useCap.checked) change.caption = cap.value.trim();
+      if (useDate.checked) { if (!date.value) { msg.textContent = '찍은 날을 골라 주세요.'; return; } change.date = date.value; }
+      if (!useCap.checked && !useDate.checked) { msg.textContent = '바꿀 것(설명 또는 찍은 날)에 표시해 주세요.'; return; }
+      go.disabled = true; bar.hidden = false; ctl.setBusy(true);
+      try {
+        const n = await runMany('editMany', ids, change, (a, b) => { bar.firstChild.style.width = (a / b * 100).toFixed(0) + '%'; });
+        ctl.setBusy(false); ctl.close(); S.pick = null; await refresh(true); renderFilters(); renderList(true); toast(`${n}개를 고쳤어요.`);
+      } catch (err) { ctl.setBusy(false); go.disabled = false; msg.textContent = '고치지 못했어요. ' + err.message; await refresh(true); }
+    }
+  },
+    h('p', { class: 'hint', text: '표시한 것만 바뀝니다. 고른 사진·영상 모두에 같은 내용이 들어가요.' }),
+    h('div', { class: 'field' }, h('label', { class: 'check' }, useCap, '설명을 이렇게 바꾸기'), cap),
+    h('div', { class: 'field' }, h('label', { class: 'check' }, useDate, '찍은 날을 이렇게 바꾸기'), date),
+    bar, msg, go);
+  const ctl = openSheet(`고른 ${ids.length}개 고치기`, form);
+}
+async function pickDelete() {
+  const ids = S.pick ? [...S.pick] : []; if (!ids.length) return;
+  if (!(await ask('여러 개 지우기', `고른 ${ids.length}개를 사진첩에서 지울까요? 구글 드라이브 휴지통에 30일 동안 남아 있어서 그 안에는 되살릴 수 있어요.`, `${ids.length}개 지우기`, true))) return;
+  const bar = h('div', { class: 'bar' }, h('i')), body = h('div', { class: 'stack' }, h('p', { text: '지우는 중이에요. 잠시만 기다려 주세요.' }), bar);
+  const ctl = openSheet('지우는 중', body, { small: true }); ctl.setBusy(true);
+  try {
+    const n = await runMany('deleteMany', ids, {}, (a, b) => { bar.firstChild.style.width = (a / b * 100).toFixed(0) + '%'; });
+    ctl.setBusy(false); ctl.close(); S.pick = null; await refresh(true); renderFilters(); renderList(true); toast(`${n}개를 지웠어요.`);
+  } catch (e) { ctl.setBusy(false); ctl.close(); await refresh(true); toast('모두 지우지는 못했어요. ' + e.message); }
+}
+
+/* ───────── 구글 드라이브에 직접 올린 것 가져오기 (엄마·아빠만) ───────── */
+async function openImport() {
+  const body = h('div', { class: 'stack' });
+  const ctl = openSheet('드라이브에서 가져오기', body);
+  const note = (cls, text) => h('p', { class: 'box' + (cls ? ' ' + cls : ''), text });
+  const load = async done => {
+    body.textContent = ''; body.append(note('', '구글 드라이브를 살펴보는 중이에요…'));
+    let r;
+    try { r = await api('import', { op: 'scan' }, 2); }
+    catch (e) {
+      body.textContent = '';
+      body.append(note('warn', e.code === 'bad_request'
+        ? '이 기능은 저장 서버를 새 버전(1.5)으로 올린 뒤부터 쓸 수 있어요. 구글 앱스 스크립트에서 서버 코드를 바꾸고 "배포 관리 → 새 버전"으로 한 번만 올려 주세요.'
+        : '살펴보지 못했어요. ' + e.message));
+      return;
+    }
+    const media = r.files.filter(f => f.kind), other = r.files.length - media.length;
+    body.textContent = '';
+    if (done) body.append(note('ok', done));
+    body.append(h('p', { text: '용량이 큰 영상은 구글 드라이브 앱으로 먼저 올린 뒤 여기서 가져오면, 빠르고 중간에 끊기지 않아요.' }),
+      h('ol', { class: 'steps' },
+        h('li', { text: `구글 드라이브 앱에서 "꾸미 사진첩 › ${r.name}" 폴더에 사진·영상을 올립니다.` }),
+        h('li', { text: '다 올라가면 아래 "다시 살펴보기"를 누릅니다.' }),
+        h('li', { text: '찍은 날을 확인하고 "사진첩에 넣기"를 누릅니다.' })),
+      h('div', { class: 'row' },
+        h('a', { class: 'btn small', id: 'im-folder', href: r.folderUrl, target: '_blank', rel: 'noopener' }, '그 폴더 열기'),
+        h('button', { type: 'button', class: 'btn small', id: 'im-again', onclick: () => load() }, '다시 살펴보기')));
+    if (!media.length) {
+      body.append(note('', '그 폴더에 넣을 사진·영상이 아직 없어요.' + (other ? ` (사진·영상이 아닌 파일 ${other}개는 넣지 않습니다.)` : '')));
+      return;
+    }
+    const rows = media.map((f, i) => {
+      const date = h('input', { class: 'input', type: 'date', id: 'im-date-' + i, value: f.date, max: '2100-12-31' });
+      return { f, date, el: h('div', { class: 'im-row' }, h('b', { text: `${f.kind === 'v' ? '영상' : '사진'} · ${f.name} · ${sizeText(f.size)}` }),
+        h('div', { class: 'field' }, h('label', { for: 'im-date-' + i, text: '찍은 날' }), date)) };
+    });
+    const cap = h('textarea', { class: 'input', id: 'im-cap', maxlength: '500', placeholder: '예) 12주 초음파' });
+    const msg = h('p', { class: 'form-msg', role: 'alert' }), bar = h('div', { class: 'bar', hidden: true }, h('i'));
+    const go = h('button', { type: 'button', class: 'btn primary', id: 'im-go' }, `${media.length}개 사진첩에 넣기`);
+    go.addEventListener('click', async () => {
+      msg.textContent = '';
+      if (rows.some(x => !x.date.value)) { msg.textContent = '찍은 날이 비어 있는 것이 있어요.'; return; }
+      go.disabled = true; bar.hidden = false; ctl.setBusy(true);
+      let added = 0;
+      try {
+        for (let i = 0; i < rows.length; i += 10) {
+          const q = await api('import', { op: 'add', caption: cap.value.trim(), files: rows.slice(i, i + 10).map(x => ({ id: x.f.id, date: x.date.value })) }, 1);
+          added += q.added; bar.firstChild.style.width = (Math.min(rows.length, i + 10) / rows.length * 100).toFixed(0) + '%';
+        }
+        ctl.setBusy(false); await refresh(true);
+        load(`${added}개를 사진첩에 넣었어요. 미리 보기 그림은 구글 드라이브가 준비하는 대로 채워집니다(영상은 몇 분 걸릴 수 있어요).`);
+      } catch (e) { ctl.setBusy(false); go.disabled = false; msg.textContent = (added ? `${added}개까지 넣었어요. ` : '') + '넣지 못했어요. ' + e.message; await refresh(true); }
+    });
+    body.append(h('h3', { text: `넣을 수 있는 것 ${media.length}개` }), ...rows.map(x => x.el),
+      other ? h('p', { class: 'hint', text: `사진·영상이 아닌 파일 ${other}개는 넣지 않습니다.` }) : h('p', { class: 'hint', text: '찍은 날은 사진에 적힌 정보나 파일 시각으로 짐작한 것입니다. 다르면 고쳐 주세요.' }),
+      h('div', { class: 'field' }, h('label', { for: 'im-cap', text: '설명 (안 써도 돼요, 모두에 같은 설명이 들어갑니다)' }), cap),
+      bar, msg, go);
+  };
+  load();
+}
+
 /* ───────── 사진첩 점검 · 목록 사본 (엄마·아빠만) ───────── */
 async function openCheck() {
   const body = h('div', { class: 'stack' });
@@ -2246,6 +2501,7 @@ function openPrefs() {
   const parents = h('div', { class: 'pref' }, h('h3', { text: '엄마·아빠 전용' }), S.master
     ? [h('div', { class: 'seg' },
         h('button', { type: 'button', class: 'btn primary', id: 'p-upload', onclick: go(openUpload) }, '사진 올리기'),
+        h('button', { type: 'button', class: 'btn', id: 'm-import', onclick: go(openImport) }, '드라이브에서 가져오기'),
         h('button', { type: 'button', class: 'btn', id: 'm-backup', onclick: go(openBackup) }, '외장하드에 보관'),
         h('button', { type: 'button', class: 'btn', id: 'm-growth', onclick: go(openGrowth) }, '성장 기록'),
         h('button', { type: 'button', class: 'btn', id: 'm-settings', onclick: go(openSettings) }, '사진첩 관리'),
@@ -2352,7 +2608,7 @@ function openMonths() {
   const pick = (kind, v) => {
     S.f.month = kind === 'month' ? v : ''; S.f.age = kind === 'age' ? v : '';
     ctl.close();
-    if (S.tab !== 'all') { S.tab = 'all'; renderAll(); } else { renderFilters(); renderList(); }
+    if (S.tab !== 'all') { S.tab = 'all'; renderAll(); Back.closed(); } else { renderFilters(); renderList(); }
     window.scrollTo(0, Math.max(0, $('#filters').getBoundingClientRect().top + window.scrollY - 12));
   };
   const body = h('div', { class: 'stack' });
@@ -2401,19 +2657,20 @@ function showWelcome(lead) {
 }
 async function refresh(keep) {
   try {
-    const r = await api('list', {}, 3);
+    const first = !S.loaded;
+    const { r, idx, changed } = await fetchIndex(3);
     S.master = !!r.master;
     if (!S.master && S.token) setToken('');
-    applyIndex(r.index);
+    if (changed || first) applyIndex(idx);
     if (!S.loaded) {
       S.loaded = true;
       const newest = S.items.reduce((a, x) => Math.max(a, x.u || 0), 0);
       if (S.master) S.seenBefore = null;
       store.set('seen', Math.max(newest, S.seenBefore || 0));
     }
-    DB.set('kv', 'index', r.index); packWait.clear();
+    if (changed) { DB.set('kv', 'index', idx); packWait.clear(); }
     $('#notice').hidden = true;
-    renderAll(keep);
+    if (changed || first || S.drawnAs !== S.master) renderAll(keep); else renderMaster();    // 바뀐 것이 없으면 다시 그리지 않습니다
     // 엄마·아빠가 들어와 있을 때, 미리 보기 그림이 아직 없는 사진이 있으면 다시 채워 봅니다.
     if (S.master && S.items.some(x => !x.th || (x.k === 'p' && !x.v))) fillMissing();
   } catch (e) {
@@ -2511,13 +2768,16 @@ function bindStatic() {
   $('#f-stage').addEventListener('click', () => { if (F.open) frameNext(); });
   document.addEventListener('visibilitychange', () => { if (F.open && document.visibilityState === 'visible') frameLock(); });
   $('#more').addEventListener('click', () => renderMore());
-  moreIO.observe($('#more-wrap'));
+  $('#f-pick').addEventListener('click', () => pickMode(!S.pick));
+  $('#pick-done').addEventListener('click', () => pickMode(false));
+  $('#pick-edit').addEventListener('click', pickEdit); $('#pick-del').addEventListener('click', pickDelete);
   $('#m-upload').addEventListener('click', openUpload);
   $('#v-close').addEventListener('click', () => closeViewer());
   $('#v-prev').addEventListener('click', () => { stopShow(); step(-1); }); $('#v-next').addEventListener('click', () => { stopShow(); step(1); });
   $('#v-show').addEventListener('click', toggleShow); $('#v-save').addEventListener('click', saveCurrent);
   $('#v-edit').addEventListener('click', () => { stopShow(); const it = V.list[V.i]; if (it) openEdit(it); });
-  window.addEventListener('popstate', () => { if (F.open) closeFrame(true); else if (V.open) closeViewer(true); });
+  window.addEventListener('popstate', () => Back.pressed());
+  window.addEventListener('beforeunload', () => { Back.leaving = true; }); window.addEventListener('pageshow', () => { Back.leaving = false; });
   document.addEventListener('keydown', e => {
     if (F.open) { if (e.key === 'Escape') closeFrame(); else if (e.key === 'ArrowRight' || e.key === ' ') frameNext(); return; }
     if (!V.open || $('#sheets').childNodes.length) return;
